@@ -673,7 +673,7 @@
         // 吸附到最近的一侧，纵向位置记住
         var mid = r.left + r.width / 2;
         orbCfg.side = mid < (window.innerWidth / 2) ? 'left' : 'right';
-        orbCfg.y = Math.round(r.top);
+        orbCfg.y = Math.round(Math.max(56, Math.min((window.innerHeight || 800) - 110, r.top)));
         saveOrbCfg();
         layoutOrb();
       } else if (orbDownAt) {

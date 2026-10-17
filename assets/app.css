@@ -845,21 +845,19 @@ body.perf .moregrp { backdrop-filter: none; background: var(--panel-2); }
   will-change: transform, opacity;
 }
 
-/* 旋转科技环：conic 渐变 + 遮罩做出一段亮弧 */
+/* 旋转科技环：内联 SVG 两段圆弧（不用 mask/conic —— WebView 里会漏出整块矩形）
+   几何：容器 58，核心 46 → 环直径取 52（inset 3px），贴着核心外缘转 */
 .aiOrb-ring {
-  position: absolute; inset: -3px; border-radius: 50%; pointer-events: none;
-  background: conic-gradient(from 0deg,
-    transparent 0deg,
-    color-mix(in srgb, var(--orb) 70%, transparent) 40deg,
-    transparent 96deg,
-    transparent 190deg,
-    color-mix(in srgb, var(--a2) 55%, transparent) 236deg,
-    transparent 300deg);
-  -webkit-mask: radial-gradient(closest-side, transparent 78%, #000 80%);
-  mask: radial-gradient(closest-side, transparent 78%, #000 80%);
+  position: absolute; inset: 3px; width: calc(100% - 6px); height: calc(100% - 6px);
+  pointer-events: none; overflow: visible;
   animation: orbSpin 7.5s linear infinite;
+  transform-origin: 50% 50%;
   will-change: transform;
 }
+.aiOrb-ring circle { fill: none; stroke-width: 2.2; stroke-linecap: round; transform-origin: 50% 50%; }
+/* 周长 2π×46 ≈ 289（viewBox 100 单位） */
+.orbArc-a { stroke: var(--orb); stroke-dasharray: 46 289; }
+.orbArc-b { stroke: var(--a2); stroke-dasharray: 20 310; stroke-dashoffset: -132; opacity: .9; }
 
 .aiOrb-core {
   position: relative; width: 46px; height: 46px; border-radius: 50%;
@@ -922,29 +920,18 @@ body.perf .moregrp { backdrop-filter: none; background: var(--panel-2); }
   100% { transform: scale(1); }
 }
 
-/* 性能优先 / 系统减弱动效：停掉旋转与呼吸，只留静态光晕 */
-body.perf .aiOrb-halo, body.perf .aiOrb-ring,
-.aiOrb.reduced .aiOrb-halo, .aiOrb.reduced .aiOrb-ring { animation: none; }
+/* 性能优先：关模糊与光晕动画，环保留旋转（只是合成层 transform，很便宜） */
+body.perf .aiOrb-halo, .aiOrb.reduced .aiOrb-halo { animation: none; }
 body.perf .aiOrb-core { backdrop-filter: none; }
 body.perf .aiOrb-halo { filter: none; opacity: .6; }
+/* 系统「减少动画」：停掉旋转与缩放，只留明暗呼吸（不产生位移，符合无障碍习惯） */
 @media (prefers-reduced-motion: reduce) {
-  .aiOrb-halo, .aiOrb-ring { animation: none; }
+  .aiOrb-ring { animation: none; }
+  .aiOrb-halo { animation: orbFade 3.6s ease-in-out infinite; }
 }
+@keyframes orbFade { 0%, 100% { opacity: .45; } 50% { opacity: .9; } }
 .aiOrb { z-index: 26; }   /* 在内容之上、弹窗(30)之下，别盖住弹窗 */
-/* 环加强：亮弧更实、更宽一点；核心加一圈虚线内环做"仪器"质感 */
-.aiOrb-ring {
-  inset: -4px;
-  background: conic-gradient(from 0deg,
-    transparent 0deg,
-    color-mix(in srgb, var(--orb) 92%, transparent) 46deg,
-    rgba(255, 255, 255, .55) 58deg,
-    transparent 112deg,
-    transparent 198deg,
-    color-mix(in srgb, var(--a2) 80%, transparent) 244deg,
-    transparent 308deg);
-  -webkit-mask: radial-gradient(closest-side, transparent 74%, #000 76%);
-  mask: radial-gradient(closest-side, transparent 74%, #000 76%);
-}
+/* 核心加一圈虚线内环做仪器质感（SVG 弧已在上文定义） */
 .aiOrb-halo {
   background: radial-gradient(circle at 50% 50%,
     color-mix(in srgb, var(--orb) 42%, transparent) 0%,
@@ -956,4 +943,4 @@ body.perf .aiOrb-halo { filter: none; opacity: .6; }
   border: 1px dashed color-mix(in srgb, var(--orb) 30%, transparent);
   opacity: .75;
 }
-.aiOrb-dot { right: 4px; top: 4px; width: 8px; height: 8px; }
+.aiOrb-dot { right: 5px; top: 5px; width: 8px; height: 8px; }
