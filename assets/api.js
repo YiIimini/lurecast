@@ -306,7 +306,9 @@
     var hit = readCache(k, ttlFor('rev'));
     if (hit && !hit.stale) return Promise.resolve(hit.data);
     var u = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&addressdetails=1&accept-language=zh&lat=' + lat + '&lon=' + lon;
-    return fetchJSON(u, { headers: { 'Accept-Language': 'zh' } }, 15000)
+    /* 地名只是「锦上添花」：不重试、6 秒就放弃（实测 Nominatim 在移动网络下常 15 s 超时，
+       带默认重试会串成 3×15 s ≈ 45 s，把整页拖死）。失败就显示「未命名位置」，之后再慢慢补。 */
+    return fetchJSON(u, { headers: { 'Accept-Language': 'zh' }, __noRetry: true }, 6000)
       .then(function (j) { writeCache(k, j); return j; })
       .catch(function () { return hit ? hit.data : null; });
   }

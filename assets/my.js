@@ -46,22 +46,28 @@
 
   function saveCurrentPlace() {
     var s = st();
-    if (!s.me) { alert('还没有定位：先用 GPS 或「找水域」选一个地方。'); return; }
+    if (!s.me) { UI.alert('还没有定位：先用 GPS 或「找水域」选一个地方。', { title: '先定位' }); return; }
     var list = favList();
     if (list.some(function (f) { return distM(f, s.me) < 120; })) {
-      alert('这个位置已经存过了（120 m 内）。');
+      UI.alert('这个位置已经存过了（120 米内）。', { title: '重复地点' });
       return;
     }
     var guess = s.placeHint || (s.place && s.place.name) || ('位置 ' + s.me.lat.toFixed(3) + ',' + s.me.lon.toFixed(3));
-    var name = prompt('给这个钓点起个名字：', guess);
-    if (name == null) return;
-    var desc = prompt('描述（可留空）：例如「停车场旁石堤，涨潮能站人」', '');
-    list.unshift({
-      id: 'f' + Date.now(), name: (name || guess).slice(0, 24), desc: (desc || '').slice(0, 120),
-      lat: s.me.lat, lon: s.me.lon, at: Date.now(), photos: []
+    UI.prompt('给这个钓点起个名字', guess, { title: '存为常用地点', placeholder: '例如：停车场旁石堤' }).then(function (name) {
+      if (name == null) return;
+      return UI.prompt('再写一句特征（可留空）', '', {
+        title: '备注', placeholder: '例如：涨潮能站人，退潮是泥滩', multiline: true, okText: '保存'
+      }).then(function (desc) {
+        if (desc == null) return;
+        list.unshift({
+          id: 'f' + Date.now(), name: (name || guess).slice(0, 24), desc: (desc || '').slice(0, 120),
+          lat: s.me.lat, lon: s.me.lon, at: Date.now(), photos: []
+        });
+        write(KEY_FAV, list.slice(0, 30));
+        renderFav();
+        UI.toast('已存为常用地点');
+      });
     });
-    write(KEY_FAV, list.slice(0, 30));
-    renderFav();
   }
 
   function renderFav() {
@@ -124,10 +130,13 @@
         var list = favList();
         var f = list[i];
         if (!f) return;
-        if (!confirm('删除常用地点「' + f.name + '」？')) return;
-        list.splice(i, 1);
-        write(KEY_FAV, list);
-        renderFav();
+        UI.confirm('删除常用地点「' + f.name + '」？', { title: '删除地点', danger: true, okText: '删除' }).then(function (ok) {
+          if (!ok) return;
+          list.splice(i, 1);
+          write(KEY_FAV, list);
+          renderFav();
+          UI.toast('已删除');
+        });
       });
     });
   }
@@ -243,7 +252,7 @@
     var s = st();
     var db = window.SPECIES_DB || [];
     var sp = db.filter(function (x) { return x.id === speciesId; })[0];
-    if (!sp) { alert('请选择鱼种'); return; }
+    if (!sp) { UI.alert('先选一个鱼种再保存。', { title: '还没选鱼种' }); return; }
     var cur = (s.wx && s.wx.data && s.wx.data.current) || {};
     var rec = {
       id: 'c' + Date.now(),
@@ -272,7 +281,7 @@
     for (var i = list.length - 1; !ok && i >= 0; i--) {
       if (list[i] && list[i].photo) { list[i] = Object.assign({}, list[i], { photo: null }); ok = write(KEY_CATCH, list); }
     }
-    if (!ok) { alert('本机存储已满，建议先删几条旧记录。'); return; }
+    if (!ok) { UI.alert('本机存储已满，建议先删几条旧记录。', { title: '存不下了' }); return; }
     pending = null;
     renderCatch();
     renderAqua();
@@ -285,11 +294,14 @@
     if (!r) return;
     var db = window.SPECIES_DB || [];
     var sp = db.filter(function (x) { return x.id === r.sp; })[0];
-    if (!confirm('删除这条「' + (sp ? sp.zh : r.sp) + '」记录？')) return;
-    list.splice(i, 1);
-    write(KEY_CATCH, list);
-    renderCatch();
-    renderAqua();
+    UI.confirm('删除这条「' + (sp ? sp.zh : r.sp) + '」记录？删了就找不回来。', { title: '删除渔获', danger: true, okText: '删除' }).then(function (ok) {
+      if (!ok) return;
+      list.splice(i, 1);
+      write(KEY_CATCH, list);
+      renderCatch();
+      renderAqua();
+      UI.toast('已删除');
+    });
   }
 
   function unlockedMap() {
@@ -521,7 +533,7 @@
           // 用户在系统分享面板点了返回是正常操作，不算失败；只有真写不出去才提示
           var msg = e && (e.message || e.errorMessage) ? (e.message || e.errorMessage) : String(e);
           if (/cancel|取消|abort/i.test(msg)) return;
-          alert('导出失败：' + msg);
+          UI.alert('导出失败：' + msg, { title: '导出失败' });
         });
       return summary;
     }
@@ -534,7 +546,7 @@
       a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 5000);
     } catch (e) {
-      alert('导出失败：' + e.message);
+      UI.alert('导出失败：' + e.message, { title: '导出失败' });
     }
     return summary;
   }
@@ -927,10 +939,10 @@
             if (/json$/i.test(f.name)) payload = String(reader.result);
             else payload = readArchiveBuffer(reader.result);
             var r = importArchive(payload);
-            alert('导入完成：新增 ' + r.added + ' 条、更新 ' + r.updated + ' 条，现有 ' + r.total +
-              ' 条记录；常用地点新增 ' + r.places + ' 个。');
+            UI.alert('导入完成：新增 ' + r.added + ' 条、更新 ' + r.updated + ' 条，现有 ' + r.total +
+              ' 条记录；常用地点新增 ' + r.places + ' 个。', { title: '导入完成' });
           } catch (e) {
-            alert('导入失败：' + e.message);
+            UI.alert('导入失败：' + e.message, { title: '导入失败' });
           }
         };
         if (/json$/i.test(f.name)) reader.readAsText(f); else reader.readAsArrayBuffer(f);

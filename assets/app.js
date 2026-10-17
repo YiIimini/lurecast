@@ -42,7 +42,7 @@
 
   /* 构建标记：每次发版改这里。页面上能看到它，一眼就能判断「我现在看的是不是旧版」。
      index.html 里资源 URL 上的 ?v= 要同步改，否则 Service Worker 会继续喂旧 JS/CSS。 */
- var BUILD = '2026-10-19 · r16';
+ var BUILD = '2026-10-20 · r17';
   var S = {
     me: null, place: null, tzOffset: 0,
     wx: null, sea: null, flood: null, osm: null,
@@ -77,9 +77,26 @@
   function setStatus(kind, text, score, timeText) {
     var dot = $('statusDot');
     if (dot) dot.className = 'dot ' + (kind || 'off');
+    if (text != null) S.statusBase = text;
     if (text != null && $('statusText')) $('statusText').textContent = text;
     if (score != null && $('stripScore')) $('stripScore').textContent = score;
     if (timeText != null && $('stripTime')) $('stripTime').textContent = timeText;
+  }
+
+  /* 加载计时：状态条后面跟「· 3.2 s」，让人知道还在动（不然几秒没变化就像卡死） */
+  function startLoadTicker(t0) {
+    stopLoadTicker();
+    S.loadTicker = setInterval(function () {
+      var el = $('statusText');
+      if (!el) return;
+      var base = S.statusBase || el.textContent || '正在取数据…';
+      var sec = ((performance.now() - t0) / 1000).toFixed(1);
+      el.textContent = base + ' · ' + sec + ' s';
+    }, 500);
+  }
+  function stopLoadTicker() {
+    if (S.loadTicker) { clearInterval(S.loadTicker); S.loadTicker = 0; }
+    if (S.statusBase && $('statusText')) $('statusText').textContent = S.statusBase;
   }
 
   /* ------------------------------------------------ 水体类型 */
@@ -320,7 +337,8 @@
     var t0 = performance.now();
     S.loading = true;
     setBusy(true);
-    setStatus('live', '正在取数据…', null, null);
+    setStatus('live', '正在取气象…', null, null);
+    startLoadTicker(t0);
 
     var lat = S.me.lat, lon = S.me.lon;
 
@@ -362,24 +380,39 @@
         setTimeout(function () { win(null); }, 6000);
       });
 
+      /* 海况 / 汇流 / 地名都只是「补充信息」：绝不让整页等它们。
+         实测 Nominatim 逆地理在移动网络下 6 s 才回（开着默认重试时串成 45 s），
+         以前 Promise.all 一挂就把首屏拖到十几秒 —— 现在先出结论与钓点，这几项到了再增量刷新。 */
+      var othersSettled = false;
       var othersP = Promise.all([
         window.Api.marine(lat, lon, force).catch(function () { return null; }),
         window.Api.flood(lat, lon, force).catch(function () { return null; }),
         window.Api.reverse(lat, lon).catch(function () { return null; })
-      ]);
-      // 关键：不要把 osmReady 放进 Promise.all —— 否则 OSM 卡 12 s 就白等了
-      return Promise.all([othersP, fast, satStructure()]).then(function (all) {
-        return { others: all[0], fast: all[1], satCands: all[2], osmReady: osmReady };
+      ]).then(function (others) {
+        othersSettled = true;
+        if (gen !== S.reqGen) return;
+        S.sea = others[0] || null;
+        S.flood = others[1] || null;
+        S.place = others[2] || null;
+        S.revalidating = [S.sea, S.flood].filter(function (x) { return x && x.revalidate; })
+          .map(function (x) { return x.revalidate; });
+        if (S.wx) { computeEnv(); rebuildSpots(); }
+        renderAll();
+        stampStatus();
+      }).catch(function () { othersSettled = true; });
+
+      // 只等「岸线谁先给」；卫星只在 OSM 没给结果时才需要等
+      return fast.then(function (firstWrap) {
+        S.tData = performance.now() - t0;
+        var first = firstWrap && firstWrap.first;
+        if (first) return { othersP: othersP, othersSettled: othersSettled, first: first, satCands: [], osmReady: osmReady };
+        return satStructure().then(function (cands) {
+          return { othersP: othersP, othersSettled: othersSettled, first: null, satCands: cands || [], osmReady: osmReady };
+        });
       });
     }).then(function (bundle) {
       if (gen !== S.reqGen) return [];      // 位置又变了，这批结果作废
-      var others = bundle.others || [];
-      S.tData = performance.now() - t0;
-      S.revalidating = [S.sea, S.flood].filter(function (x) { return x && x.revalidate; })
-        .map(function (x) { return x.revalidate; });
-      S.sea = others[0]; S.flood = others[1]; S.place = others[2];
-
-      var first = bundle.fast && bundle.fast.first;
+      var first = bundle.first;
       if (first && first.source === 'osm') {
         // OSM 先到（最快路径）
         S.structureSource = 'osm';
@@ -469,6 +502,7 @@
       rebuildSpots();
       var tCompute = performance.now();
       S.loading = false;
+      stopLoadTicker();
       setBusy(false);
       renderAll();
       var tRender = performance.now();
@@ -496,6 +530,7 @@
       }
     }).catch(function (err) {
       S.loading = false;
+      stopLoadTicker();
       setBusy(false);
       S.error = err;
       if (S.wx && S.wx.data) {
@@ -638,6 +673,8 @@
     renderWeather(); renderWind(); renderWater(); renderTerrain();
     renderTime(); renderFactors(); renderMeta(); drawMap();
     if (window.My && window.My.render && S.tab === 'me') window.My.render();
+    // 动态生成出来的 <select>（影像期次等）也换成自绘下拉
+    if (window.UI && window.UI.enhanceAll) window.UI.enhanceAll();
   }
 
   function kvHtml(label, value, sub) {
@@ -653,9 +690,18 @@
       return;
     }
     var place = S.place || {};
+    /* 地名三级兜底：用户/搜索给的 → Nominatim 逆地理 → OSM 里最近那处水域的名字。
+       最后这条不花一次网络请求，逆地理超时（实测常 6 s 才失败）时也不会显示「未命名位置」。*/
+    var bodyName = '';
+    var bodies = (S.pickBodies && S.pickBodies.length ? S.pickBodies : S.bodies) || [];
+    for (var bi = 0; bi < bodies.length; bi++) {
+      if (bodies[bi] && bodies[bi].name) { bodyName = bodies[bi].name; break; }
+    }
     var name = S.placeHint || place.name ||
-      (place.address && (place.address.city || place.address.town || place.address.county)) || '未命名位置';
-    var addr = place.display_name || '';
+      (place.address && (place.address.city || place.address.town || place.address.county)) ||
+      (bodyName ? bodyName + ' 附近' : '未命名位置');
+    var addr = place.display_name || (bodyName ? '取自 OSM 水域名' : '');
+    var nameFromBody = !S.placeHint && !place.name && !!bodyName;
     var nearBody = (S.pickBodies && S.pickBodies[0]) || null;
     if (!nearBody && S.satWater) {
       box.innerHTML = '<div class="loctitle"><b>' + esc(S.placeHint || '当前位置') + '</b><span>' +
@@ -857,18 +903,43 @@
   /* 罗盘：指针用 rAF 平滑追随目标风向（换小时/刷新时都会"转"过去），
      而不是瞬间跳变；同时给出未来 1/3/6 小时的风向，方便判断风怎么转。 */
   var compass = { cur: 0, target: 0, raf: 0, started: false };
+  /* 设备航向：开启后刻度盘反向旋转，N 永远指着真北（像陀螺仪罗盘）。 */
+  var heading = { cur: 0, target: 0, has: false, want: true, listening: false, probe: 0 };
+
+  function shortArc(from, to) { return ((to - from + 540) % 360) - 180; }
+
+  function loadCompassMode() {
+    try { heading.want = Store.getItem('lc:compass') !== 'off'; } catch (e) { heading.want = true; }
+  }
+  function saveCompassMode() {
+    try { Store.setItem('lc:compass', heading.want ? 'auto' : 'off'); } catch (e) { /* 忽略 */ }
+  }
+
+  function compassBtn(text, on) {
+    var b = $('btnCompassMode');
+    if (!b) return;
+    b.textContent = text;
+    b.classList.toggle('on', !!on);
+  }
 
   function compassTick() {
-    var arrow = $('windArrow');
-    if (!arrow) { compass.raf = 0; return; }
-    var diff = ((compass.target - compass.cur + 540) % 360) - 180;   // 走最短弧
-    compass.cur = (compass.cur + diff * 0.12 + 360) % 360;
-    arrow.style.transform = 'rotate(' + ((compass.cur + 180) % 360).toFixed(2) + 'deg)';   // SVG 的针尖画在正下方，+180 才对得上正北朝上
-    if (Math.abs(diff) > 0.3) {
+    var arrow = $('windArrow'), dial = $('compassDial');
+    if (!arrow || !dial) { compass.raf = 0; return; }
+    var d1 = shortArc(compass.cur, compass.target);                     // 风向指针
+    var d2 = heading.has ? shortArc(heading.cur, heading.target)        // 设备航向
+      : shortArc(heading.cur, 0);                                      // 没传感器 → 刻度盘回正
+    compass.cur = (compass.cur + d1 * 0.14 + 360) % 360;
+    heading.cur = (heading.cur + d2 * 0.2 + 360) % 360;
+    // 指针画在正下方，+180 才对得上「正北朝上」；再减去设备航向，屏幕上就始终指向真实风向
+    arrow.style.transform = 'rotate(' + ((compass.cur + 180 - heading.cur + 360) % 360).toFixed(2) + 'deg)';
+    dial.style.transform = 'rotate(' + ((360 - heading.cur) % 360).toFixed(2) + 'deg)';
+    var hd = $('compassHdg');
+    if (hd) hd.textContent = heading.has ? Math.round(heading.target) + '°' : '';
+    if (Math.abs(d1) > 0.25 || Math.abs(d2) > 0.25) {
       compass.raf = requestAnimationFrame(compassTick);
     } else {
       compass.cur = compass.target;
-      arrow.style.transform = 'rotate(' + ((compass.cur + 180) % 360).toFixed(2) + 'deg)';
+      heading.cur = heading.has ? heading.target : 0;
       compass.raf = 0;
     }
   }
@@ -877,6 +948,46 @@
     compass.target = ((deg % 360) + 360) % 360;
     if (!compass.started) { compass.cur = compass.target; compass.started = true; }
     if (!compass.raf) compass.raf = requestAnimationFrame(compassTick);
+  }
+
+  /* ---- 设备方向：只有「绝对方向」或 iOS 的 webkitCompassHeading 才是真北 ---- */
+  function onOrient(e) {
+    if (!heading.want) return;
+    var h = null;
+    if (typeof e.webkitCompassHeading === 'number' && isFinite(e.webkitCompassHeading)) {
+      h = e.webkitCompassHeading;
+    } else if (e.absolute === true && e.alpha != null && isFinite(e.alpha)) {
+      h = 360 - e.alpha;
+    }
+    if (h == null) return;
+    heading.has = true;
+    heading.target = ((h % 360) + 360) % 360;
+    if (!compass.raf) compass.raf = requestAnimationFrame(compassTick);
+  }
+
+  function enableCompass() {
+    if (heading.listening || !heading.want) return;
+    if (!window.DeviceOrientationEvent) { compassBtn('无传感器', false); return; }
+    var attach = function () {
+      window.addEventListener('deviceorientationabsolute', onOrient, true);
+      window.addEventListener('deviceorientation', onOrient, true);
+      heading.listening = true;
+      clearTimeout(heading.probe);
+      heading.probe = setTimeout(function () {
+        if (heading.has) compassBtn('指北 ✓', true);
+        else compassBtn('无磁力计', false);      // 设备没有绝对方向传感器
+      }, 2500);
+    };
+    var D = window.DeviceOrientationEvent;
+    if (typeof D.requestPermission === 'function') {
+      // iOS 13+ 必须在用户手势里申请
+      D.requestPermission().then(function (r) {
+        if (r === 'granted') attach();
+        else compassBtn('指北被拒', false);
+      }).catch(function () { compassBtn('指北被拒', false); });
+    } else {
+      attach();
+    }
   }
 
   function hourlyAt(hourOffset) {
@@ -1669,7 +1780,15 @@
     }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
   }
 
-  function openModal(id) { var m = $(id); if (m) m.classList.remove('hidden'); }
+  function openModal(id) {
+    var m = $(id);
+    if (!m) return;
+    m.classList.remove('hidden');
+    // 弹窗里的 <select> 统一换成自绘下拉（原生下拉在 WebView 里是系统全屏列表，与界面风格完全脱节）
+    if (window.UI && window.UI.enhanceAll) setTimeout(function () { window.UI.enhanceAll(m); }, 0);
+    // 每次打开「找水域」都重画一次搜索历史（可能在别处刚搜过新地名）
+    if (id === 'modalManual' && window.LureCast && window.LureCast.renderSearchHistory) window.LureCast.renderSearchHistory();
+  }
   function closeModal(id) { var m = $(id); if (m) m.classList.add('hidden'); }
 
   /* ------------------------------------------------ 外观 */
@@ -2072,7 +2191,51 @@
     var isWater = r.kind === 'lake' || r.kind === 'reservoir' || r.kind === 'water' ||
       r.kind === 'river' || r.kind === 'bay' || r.kind === 'wetland' || r.kind === 'pond';
     var pt = isWater && r.bbox ? nearestOnBbox(r.bbox, S.me) : { lat: r.lat, lon: r.lon };
+    pushSearchHistory({ name: r.name, kind: r.kind, lat: pt.lat, lon: pt.lon });
     setMe(pt.lat, pt.lon, null, isWater ? r.name : null);
+  }
+
+  /* 搜索历史：只存「名字 + 落点」，最多 8 条，点一下直接切过去 */
+  var HIST_KEY = 'lc:searchhist';
+  function searchHistory() {
+    try {
+      var raw = Store.getItem(HIST_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.slice(0, 8) : [];
+    } catch (e) { return []; }
+  }
+  function pushSearchHistory(item) {
+    if (!item || !item.name) return;
+    var list = searchHistory().filter(function (x) {
+      return !(Math.abs(x.lat - item.lat) < 0.0008 && Math.abs(x.lon - item.lon) < 0.0008);
+    });
+    list.unshift({ name: String(item.name).slice(0, 40), kind: item.kind || '', lat: item.lat, lon: item.lon, at: Date.now() });
+    try { Store.setItem(HIST_KEY, JSON.stringify(list.slice(0, 8))); } catch (e) { /* 忽略 */ }
+    renderSearchHistory();
+  }
+  function renderSearchHistory() {
+    var field = $('histField'), box = $('searchHist');
+    if (!field || !box) return;
+    var list = searchHistory();
+    field.style.display = list.length ? '' : 'none';
+    if (!list.length) { box.innerHTML = ''; return; }
+    box.innerHTML = list.map(function (x, i) {
+      return '<button class="resitem slim" data-hist="' + i + '"><b>' + esc(x.name) + '</b>' +
+        '<span>' + (KIND_LABEL[x.kind] || '地点') + ' · ' + x.lat.toFixed(4) + ', ' + x.lon.toFixed(4) + '</span></button>';
+    }).join('') + '<button class="chip" id="btnClearHist" style="align-self:flex-start">清空历史</button>';
+    Array.prototype.forEach.call(box.querySelectorAll('[data-hist]'), function (b) {
+      b.addEventListener('click', function () {
+        var x = searchHistory()[parseInt(b.getAttribute('data-hist'), 10)];
+        if (!x) return;
+        closeModal('modalManual');
+        setMe(x.lat, x.lon, null, x.name);
+      });
+    });
+    if ($('btnClearHist')) $('btnClearHist').addEventListener('click', function () {
+      try { Store.removeItem(HIST_KEY); } catch (e) { /* 忽略 */ }
+      renderSearchHistory();
+      window.UI.toast('已清空搜索历史');
+    });
   }
 
   /* 找水域弹窗里的常用地点（点一下直接切过去） */
@@ -2103,6 +2266,7 @@
     var input = $('searchInput'), results = $('searchResults');
     var tmr = null, lastList = [];
 
+    renderSearchHistory();
     var EXAMPLES = ['太湖', '千岛湖', '鄱阳湖', '洞庭湖', '洪湖', '巢湖', '密云水库', '丹江口水库'];
 
     function showEmpty() {
@@ -2189,6 +2353,23 @@
     if ($('btnAgent')) $('btnAgent').addEventListener('click', function () { openModal('modalAgent'); });
     if (window.Agent && window.Agent.bind) { try { window.Agent.bind(); } catch (e) { /* 助手初始化失败不影响主流程 */ } }
     if ($('btnHere')) $('btnHere').addEventListener('click', locate);
+    // 罗盘指北开关（无传感器的设备点了会提示"无磁力计"）
+    loadCompassMode();
+    if ($('btnCompassMode')) {
+      $('btnCompassMode').addEventListener('click', function () {
+        heading.want = !heading.want;
+        saveCompassMode();
+        if (heading.want) { enableCompass(); compassBtn('指北…', true); }
+        else {
+          heading.has = false;
+          compassBtn('指北', false);
+          try { window.LureCast.toast && window.LureCast.toast('罗盘已固定朝上'); } catch (e) {}
+        }
+        if (!compass.raf) compass.raf = requestAnimationFrame(compassTick);
+      });
+      if (heading.want) { compassBtn('指北…', true); enableCompass(); }
+      else compassBtn('指北', false);
+    }
     // 分享 / 外部导航（高德、百度、系统分享）
     if ($('btnShareLoc')) $('btnShareLoc').addEventListener('click', openShareModal);
     if ($('btnNavAmap')) $('btnNavAmap').addEventListener('click', function () { shareNav('amap'); });
@@ -2197,6 +2378,17 @@
     if ($('btnCopyCoord')) $('btnCopyCoord').addEventListener('click', shareCoordText);
     if ($('btnManual')) $('btnManual').addEventListener('click', function () { renderManualFavs(); openModal('modalManual'); });
     if ($('btnFitMap')) $('btnFitMap').addEventListener('click', fitAll);
+    if ($('btnMapMe')) $('btnMapMe').addEventListener('click', function () {
+      if (!S.map) initMap();
+      if (!S.map) return;
+      if (!S.me) { window.UI.alert('还没有定位：先点「用 GPS 定位」，或在地图上点一下选点。', { title: '先定位' }); return; }
+      if ($('cardMap') && $('cardMap').classList.contains('fs')) mapFull(true);
+      S.map.setView([S.me.lat, S.me.lon], Math.max(15, S.map.getZoom() || 15), { animate: true });
+      setTimeout(function () { if (S.map) S.map.invalidateSize(); }, 60);
+      window.UI.toast('已回到你的位置');
+    });
+    // 启动时把设置里的 <select> 换成自绘下拉
+    if (window.UI && window.UI.enhanceAll) window.UI.enhanceAll();
     if ($('btnMapFull')) $('btnMapFull').addEventListener('click', function () { mapFull(); });
     document.addEventListener('keydown', function (e) {
       if ((e.key === 'Escape' || e.key === 'Esc') && $('cardMap') && $('cardMap').classList.contains('fs')) mapFull(false);
@@ -2388,8 +2580,9 @@
   window.LureCast = {
     state: S, cfg: CFG, store: Store, refresh: refresh, setMe: setMe, locate: locate,
     applyTabNames: applyTabNames, renderAll: renderAll, drawMap: drawMap, drawRoutes: drawRoutes,
-    mapFull: mapFull, applyTab: applyTab, openModal: openModal, toast: toast,
-    setWaterType: setWaterType, setSpecies: setSpecies, openShareModal: openShareModal
+    mapFull: mapFull, applyTab: applyTab, openModal: openModal, closeModal: closeModal, toast: toast,
+    setWaterType: setWaterType, setSpecies: setSpecies, openShareModal: openShareModal,
+    renderSearchHistory: renderSearchHistory
   };
 
   /* ------------------------------------------------ 分享 / 外部导航 */

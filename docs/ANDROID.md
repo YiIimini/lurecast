@@ -144,6 +144,7 @@ cd android
   右边整片空）。加 `span2` 后实测 1144/1144 满宽，6 格完整、无裁切（窄屏本来就满宽，未受影响）。
 - ✅ **坐标分享 / 外部导航（本轮）**：定位卡「分享」→ 面板四格（高德导航 / 百度导航 / 分享位置 / 复制坐标）。
   实测坐标换算：WGS-84 29.57000,119.02000 → GCJ-02 29.56752,119.02510 → BD-09 29.57378,119.03155；
+
   国外点（巴黎 48.8584,2.2945）不偏移。点「高德导航」在没装高德 App 的模拟器上：先发 `androidamap://`
   深链（被 `Bridge.launchIntent` 静默吞掉），1.4 s 内没切走 → 回落到 `uri.amap.com` 网页版，
   实测确实拉起了 Chrome（`mCurrentFocus=com.android.chrome/...FirstRunActivity`），App 本身没被导航走。
@@ -151,6 +152,13 @@ cd android
   `千岛湖 · 湖心 / 坐标 29.57000, 119.02000（WGS-84）/ 高德坐标 29.56752, 119.02510（GCJ-02）/ 链接`。
   「复制坐标」三行文本进剪贴板并弹轻提示。定位卡头部两个按钮 56+103 px，363 px 宽下不挤压。
   新增 `assets/share.js`（纯本地换算，不联网）、`#modalShare`、`.toast` 轻提示；i18n 补 12 条词条。
+- ✅ **本轮（r17）六项一起过**：①罗盘指北：模拟 `deviceorientationabsolute` alpha=270/180 → 刻度盘 rotate 269.8°/179.8°、
+  指针同步换算、标题显示「90°/180°」，无磁力计机型（模拟器）如实显示「无磁力计」；②加载提速：新坐标 5.8 s
+  出结论与钓点（`state.timing`：data 4779 ms / elev 1022 ms / sat 1235 ms 并行），状态条每 0.5 s 追加计时；
+  ③原生 UI 清零：`select:not(.uisource)` = 0，自绘 `UI.alert/confirm/prompt/sheet` 实测可用（危险按钮带 `danger` 红）；
+  ④地图「我的位置」：先挪到 0,0/z3，点按钮回到 39.2372,-123.1500、zoom=15；⑤搜索历史：注入 2 条 → 弹窗可见、
+  点第一条即切到千岛湖；⑥助手发图：注入 120×120 JPEG → 缩略图出现（data URL），发送时组装
+  `[{type:'text'},{type:'image_url'}]`（Gemini 侧转 `inline_data`）。全程 0 未捕获异常。
 - ✅ **AI 助手 / 应用内 Agent（本轮）**：顶栏星标 → `#modalAgent` 聊天面板，15 个本机工具（10 读 + 5 写）。
   实测：未配 Key 时给「先配一个大模型 + 打开设置」引导；配好后标题显示模型名；请求打到
   `{base}/chat/completions`，body 带 `tools`（15 条，含 `required`）、`tool_choice=auto`、`Authorization`。

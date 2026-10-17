@@ -307,6 +307,21 @@
         if (parts.length) contents.push({ role: 'model', parts: parts });
         return;
       }
+      // 多模态：content 是数组时拆成 text / inline_data（助手发图走这里）
+      if (Array.isArray(m.content)) {
+        var ups = [];
+        m.content.forEach(function (part) {
+          if (!part) return;
+          if (part.type === 'text') ups.push({ text: String(part.text || '') });
+          else if (part.type === 'image_url' && part.image_url && part.image_url.url) {
+            var u = String(part.image_url.url);
+            var mt = (u.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg';
+            ups.push({ inline_data: { mime_type: mt, data: u.split(',')[1] || '' } });
+          }
+        });
+        if (ups.length) contents.push({ role: 'user', parts: ups });
+        return;
+      }
       contents.push({ role: 'user', parts: [{ text: String(m.content || '') }] });
     });
     var body = { contents: contents, generationConfig: { temperature: 0.4, maxOutputTokens: 900 } };

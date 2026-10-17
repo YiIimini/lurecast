@@ -13,8 +13,8 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="assets/theme.css?v=20261019i">
-<link rel="stylesheet" href="assets/app.css?v=20261019i">
+<link rel="stylesheet" href="assets/theme.css?v=20261020a">
+<link rel="stylesheet" href="assets/app.css?v=20261020a">
 </head>
 <body class="hoverable">
 <div class="app">
@@ -138,17 +138,31 @@
         <div class="card-head">
           <span class="ico"><svg viewBox="0 0 24 24"><path d="M3 8h11a3 3 0 1 0-3-3"/><path d="M3 16h14a3 3 0 1 1-3 3"/><path d="M3 12h8"/></svg></span>
           <h2>风况与迎风岸</h2>
-          <div class="head-right"><span class="card-note" id="windNote">--</span></div>
+          <div class="head-right"><button class="act ghost" id="btnCompassMode" data-tip="罗盘指北|开启后刻度盘跟随手机方向旋转，N 永远指向真北；没有方向传感器的设备会固定朝上。">指北</button><span class="card-note" id="windNote">--</span></div>
         </div>
         <div class="compasswrap">
           <div class="compass">
             <svg viewBox="0 0 116 116" aria-hidden="true">
-              <circle cx="58" cy="58" r="52" fill="none" stroke="var(--hair)" stroke-width="1"/>
+              <!-- 刻度盘：跟着设备航向整体旋转，N 永远指向真北（无传感器时固定朝上） -->
+              <g class="dial" id="compassDial">
+                <circle cx="58" cy="58" r="52" fill="none" stroke="var(--hair)" stroke-width="1"/>
+                <g class="ticks">
+                  <line x1="58" y1="6" x2="58" y2="12"/>
+                  <line x1="58" y1="104" x2="58" y2="110"/>
+                  <line x1="6" y1="58" x2="12" y2="58"/>
+                  <line x1="104" y1="58" x2="110" y2="58"/>
+                  <line x1="21" y1="21" x2="25" y2="25"/>
+                  <line x1="91" y1="91" x2="95" y2="95"/>
+                  <line x1="95" y1="21" x2="91" y2="25"/>
+                  <line x1="25" y1="91" x2="21" y2="95"/>
+                </g>
+                <text class="lbl n" x="58" y="13" text-anchor="middle">N</text>
+                <text class="lbl" x="105" y="60" text-anchor="middle">E</text>
+                <text class="lbl" x="58" y="109" text-anchor="middle">S</text>
+                <text class="lbl" x="12" y="60" text-anchor="middle">W</text>
+              </g>
               <circle cx="58" cy="58" r="38" fill="none" stroke="var(--hair)" stroke-width="1" stroke-dasharray="2 4"/>
-              <text class="lbl" x="58" y="13" text-anchor="middle">N</text>
-              <text class="lbl" x="105" y="60" text-anchor="middle">E</text>
-              <text class="lbl" x="58" y="109" text-anchor="middle">S</text>
-              <text class="lbl" x="12" y="60" text-anchor="middle">W</text>
+              <text class="hdg" id="compassHdg" x="58" y="76" text-anchor="middle"></text>
               <g class="arrow" id="windArrow">
                 <g class="streaks">
                   <line x1="50" y1="36" x2="50" y2="18"/>
@@ -249,7 +263,11 @@
         <div class="card-head">
           <span class="ico"><svg viewBox="0 0 24 24"><path d="M9 4l6 2 6-2v14l-6 2-6-2-6 2V6z"/><path d="M9 4v14M15 6v14"/></svg></span>
           <h2>钓点分布</h2>
-          <div class="head-right"><button class="act ghost icoact" id="btnMapFull" data-tip="全屏看地图" aria-label="全屏看地图"><svg class="ic-in" viewBox="0 0 24 24"><path d="M9 4H4v5"/><path d="M15 20h5v-5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/></svg><svg class="ic-out" viewBox="0 0 24 24"><path d="M4 9h5V4"/><path d="M20 15h-5v5"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/></svg></button><button class="act ghost" id="btnFitMap">看全部</button></div>
+          <div class="head-right">
+            <button class="act ghost icoact" id="btnMapMe" data-tip="回到我的位置|把地图拉回你现在的坐标（GPS 或手动选的点）。" aria-label="回到我的位置"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg></button>
+            <button class="act ghost icoact" id="btnMapFull" data-tip="全屏看地图" aria-label="全屏看地图"><svg class="ic-in" viewBox="0 0 24 24"><path d="M9 4H4v5"/><path d="M15 20h5v-5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/></svg><svg class="ic-out" viewBox="0 0 24 24"><path d="M4 9h5V4"/><path d="M20 15h-5v5"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/></svg></button>
+            <button class="act ghost" id="btnFitMap">看全部</button>
+          </div>
         </div>
         <div class="mapbox"><div id="map"></div></div>
         <div class="maplgd">
@@ -462,6 +480,10 @@
         <input id="searchInput" placeholder="例如：千岛湖、太湖、Bass Pro Lake" autocomplete="off">
       </div>
       <div class="reslist" id="searchResults"></div>
+      <div class="field" id="histField" style="display:none">
+        <label>最近搜过（点一下直接切过去）</label>
+        <div class="reslist" id="searchHist"></div>
+      </div>
       <div class="field">
         <label>或直接填坐标（WGS84）</label>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -495,9 +517,14 @@
     <div class="aglog" id="agLog"></div>
     <div class="agquick" id="agQuick"></div>
     <div class="aginput">
+      <button class="act ghost icoact" id="agPick" data-tip="发张照片|拍照或选图，助手能看鱼、看水下结构、看岸边环境。" aria-label="添加照片">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M3.6 17l4.6-4.4 3.2 3 3-2.8 5.6 5"/></svg>
+      </button>
+      <div class="agthumb" id="agThumb" style="display:none"><img id="agThumbImg" alt="附件"><button id="agThumbX" aria-label="移除照片">×</button></div>
       <textarea id="agInput" rows="1" placeholder="问点什么…（例如：今天这风该打哪一岸）"></textarea>
       <button class="act primary" id="agSend">发送</button>
       <button class="act ghost" id="agStop" style="display:none">停止</button>
+      <input type="file" id="agFile" accept="image/*" style="display:none">
     </div>
     <div class="modal-foot" id="agFoot">回答由你自选的模型生成；数据是本机的定位/气象/OSM/Sentinel-2 计算结果，推断值不等于实测。</div>
   </div>
@@ -572,16 +599,17 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="assets/store.js?v=20261019i"></script>
-<script src="assets/api.js?v=20261019i"></script>
-<script src="assets/engine.js?v=20261019i"></script>
-<script src="assets/sat.js?v=20261019i"></script>
-<script src="assets/species.js?v=20261019i"></script>
-<script src="assets/i18n.js?v=20261019i"></script>
-<script src="assets/ai.js?v=20261019i"></script>
-<script src="assets/my.js?v=20261019i"></script>
-<script src="assets/share.js?v=20261019i"></script>
-<script src="assets/app.js?v=20261019i"></script>
-<script src="assets/agent.js?v=20261019i"></script>
+<script src="assets/store.js?v=20261020a"></script>
+<script src="assets/api.js?v=20261020a"></script>
+<script src="assets/engine.js?v=20261020a"></script>
+<script src="assets/sat.js?v=20261020a"></script>
+<script src="assets/species.js?v=20261020a"></script>
+<script src="assets/i18n.js?v=20261020a"></script>
+<script src="assets/ai.js?v=20261020a"></script>
+<script src="assets/my.js?v=20261020a"></script>
+<script src="assets/share.js?v=20261020a"></script>
+<script src="assets/ui.js?v=20261020a"></script>
+<script src="assets/app.js?v=20261020a"></script>
+<script src="assets/agent.js?v=20261020a"></script>
 </body>
 </html>

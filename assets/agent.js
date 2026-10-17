@@ -310,6 +310,45 @@
   var messages = [];     // OpenAI 格式
   var uiLog = [];        // 只存 user/assistant 文本，用于持久化与重绘
   var busy = false, abortFlag = false;
+  var attach = null;          // 待发送的图片 { url, w, h }
+  var MAX_IMG_PX = 900;
+
+  function hasImg(convo) {
+    for (var i = convo.length - 1; i >= 0; i--) {
+      if (Array.isArray(convo[i].content)) return true;
+    }
+    return false;
+  }
+
+  /* 拍照/选图 → 压到 900px 的 JPEG，足够模型看清鱼和水下结构，又不至于把请求撑爆 */
+  function readImageFile(file) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          var scale = Math.min(1, MAX_IMG_PX / Math.max(img.width, img.height));
+          var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+          var c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve({ url: c.toDataURL('image/jpeg', 0.82), w: w, h: h });
+        };
+        img.onerror = function () { reject(new Error('图片读不出来')); };
+        img.src = String(fr.result || '');
+      };
+      fr.onerror = function () { reject(new Error('图片读不出来')); };
+      fr.readAsDataURL(file);
+    });
+  }
+
+  function renderAttach() {
+    var row = $('agThumb'), img = $('agThumbImg');
+    if (!row || !img) return;
+    if (!attach) { row.style.display = 'none'; img.removeAttribute('src'); return; }
+    img.src = attach.url;
+    row.style.display = '';
+  }
 
   function loadHistory() {
     try {
@@ -320,7 +359,13 @@
     } catch (e) { /* 忽略 */ }
   }
   function saveHistory() {
-    try { Store.setItem(KEY, JSON.stringify(uiLog.slice(-30))); } catch (e) { /* 忽略 */ }
+    // 图片不落盘（一张 100-200 KB，几十条就能把历史撑爆），只存文字
+    try {
+      var slim = uiLog.slice(-30).map(function (m) {
+        return m.img ? { role: m.role, text: (m.text || '') + '（附图）', tools: m.tools || [] } : m;
+      });
+      Store.setItem(KEY, JSON.stringify(slim));
+    } catch (e) { /* 忽略 */ }
   }
 
   function mdLite(text) {
@@ -339,7 +384,10 @@
       return;
     }
     box.innerHTML = uiLog.map(function (m) {
-      if (m.role === 'user') return '<div class="agmsg me"><div class="agbub">' + esc(m.text) + '</div></div>';
+      if (m.role === 'user') {
+        var thumb = m.img ? '<img class="agimg" src="' + m.img + '" alt="附件">' : '';
+        return '<div class="agmsg me"><div class="agbub">' + thumb + esc(m.text) + '</div></div>';
+      }
       var tools = (m.tools || []).map(function (t) {
         return '<span class="agtool' + (t.action ? ' act' : '') + '">' + esc(t.label) + '</span>';
       }).join('');
@@ -402,7 +450,7 @@
 
   function ask(text) {
     if (busy) return;
-    if (!window.AI || !window.AI.chat) { alert('ai.js 没加载'); return; }
+    if (!window.AI || !window.AI.chat) { UI.alert('AI 模块没加载，请重启应用。', { title: '出错了' }); return; }
     var problem = window.AI.chatProblem ? window.AI.chatProblem() : 'AI 模块没加载';
     if (problem) {
       renderLog();
@@ -410,7 +458,7 @@
       return;
     }
 
-    uiLog.push({ role: 'user', text: text });
+    uiLog.push({ role: 'user', text: text, img: attach ? attach.url : null });
     saveHistory();
     renderLog();
     busy = true; abortFlag = false;
@@ -418,8 +466,20 @@
     setBusyUI(true);
 
     var convo = [{ role: 'system', content: systemPrompt() }].concat(historyForModel());
+    // 带图片时整条消息换成多模态格式：文本 + image_url（Gemini 在 ai.js 里转成 inline_data）
+    if (attach) {
+      var last = convo[convo.length - 1];
+      if (last && last.role === 'user') {
+        last.content = [
+          { type: 'text', text: (text || '看看这张照片。') + '\n（我同时带着这份应用里的实时数据，需要的话用工具取。）' },
+          { type: 'image_url', image_url: { url: attach.url } }
+        ];
+      }
+    }
     messages = convo;
-    pending('正在读数据…');
+    attach = null;
+    renderAttach();
+    pending(hasImg(convo) ? '正在看图并读数据…' : '正在读数据…');
 
     var usedTools = [];
 
@@ -516,14 +576,32 @@
     function submit() {
       if (!input) return;
       var v = input.value.trim();
-      if (!v) return;
+      if (!v && !attach) return;
       input.value = '';
-      ask(v);
+      ask(v || '看看这张照片，说说这里怎么钓。');
     }
     if (send) send.addEventListener('click', submit);
     if (input) input.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
     });
+    /* 图片：拍照或从相册选，压到 900px 再发（模型看鱼、看水下结构都够用） */
+    if ($('agPick') && $('agFile')) {
+      $('agPick').addEventListener('click', function () { $('agFile').click(); });
+      $('agFile').addEventListener('change', function () {
+        var f = this.files && this.files[0];
+        this.value = '';
+        if (!f) return;
+        readImageFile(f).then(function (img) {
+          attach = img;
+          renderAttach();
+          if ($('agInput')) $('agInput').focus();
+        }).catch(function (e) {
+          UI.alert('这张图读不出来：' + (e && e.message ? e.message : e), { title: '图片有问题' });
+        });
+      });
+    }
+    if ($('agThumbX')) $('agThumbX').addEventListener('click', function () { attach = null; renderAttach(); });
+    renderAttach();
     if ($('agStop')) $('agStop').addEventListener('click', function () { abortFlag = true; });
     if ($('agClear')) $('agClear').addEventListener('click', function () {
       uiLog = []; messages = []; saveHistory(); renderLog();
