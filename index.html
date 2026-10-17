@@ -13,8 +13,8 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="assets/theme.css?v=20261020a">
-<link rel="stylesheet" href="assets/app.css?v=20261020a">
+<link rel="stylesheet" href="assets/theme.css?v=20261020c">
+<link rel="stylesheet" href="assets/app.css?v=20261020c">
 </head>
 <body class="hoverable">
 <div class="app">
@@ -457,6 +457,24 @@
           <span class="hint">（保留渔获与常用地点）</span>
         </div>
         <p class="hint">渔获照片、常用地点、设置、卫星快照都放在本机 IndexedDB（比 localStorage 大得多，不会 5 MB 就满）。要换设备：「我的 → 导出档案」带走 zip。</p>
+      <details class="setgrp">
+        <summary>版本与更新</summary>
+        <p class="hint" id="verInfo">正在读取版本…</p>
+        <div class="field">
+          <label>更新源（可留空）<span class="hint-inline">填一个能公开访问的 version.json，或 GitHub Release API</span></label>
+          <input id="updateUrl" placeholder="https://…/version.json 或 https://api.github.com/repos/owner/repo/releases/latest" autocomplete="off">
+        </div>
+        <div class="chiprow">
+          <button class="act ghost" id="btnCheckUpdate">检查更新</button>
+          <span class="hint" id="updateState">未检查</span>
+        </div>
+        <p class="hint">
+          格式：<code>{"build":19,"apk":"https://…/LureCast.apk","notes":"这次改了什么","url":"发布页"}</code>。
+          填 GitHub Release API 时自动取最新 release 的 <code>.apk</code> 资产与说明。
+          <b>私有仓库没法直接给 App 读</b>：把 APK 放到公开的 Release／网盘再填直链，或把仓库设为公开。
+          点「去下载」交给系统浏览器下载，下载完点一下安装（覆盖安装不丢数据）。
+        </p>
+      </details>
       </details>
     </div>
     <div class="modal-foot">设置只存在本机（IndexedDB），不进任何服务器；换设备用「导出档案」带走。</div>
@@ -599,17 +617,17 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="assets/store.js?v=20261020a"></script>
-<script src="assets/api.js?v=20261020a"></script>
-<script src="assets/engine.js?v=20261020a"></script>
-<script src="assets/sat.js?v=20261020a"></script>
-<script src="assets/species.js?v=20261020a"></script>
-<script src="assets/i18n.js?v=20261020a"></script>
-<script src="assets/ai.js?v=20261020a"></script>
-<script src="assets/my.js?v=20261020a"></script>
-<script src="assets/share.js?v=20261020a"></script>
-<script src="assets/ui.js?v=20261020a"></script>
-<script src="assets/app.js?v=20261020a"></script>
-<script src="assets/agent.js?v=20261020a"></script>
+<script src="assets/store.js?v=20261020c"></script>
+<script src="assets/api.js?v=20261020c"></script>
+<script src="assets/engine.js?v=20261020c"></script>
+<script src="assets/sat.js?v=20261020c"></script>
+<script src="assets/species.js?v=20261020c"></script>
+<script src="assets/i18n.js?v=20261020c"></script>
+<script src="assets/ai.js?v=20261020c"></script>
+<script src="assets/my.js?v=20261020c"></script>
+<script src="assets/share.js?v=20261020c"></script>
+<script src="assets/ui.js?v=20261020c"></script>
+<script src="assets/app.js?v=20261020c"></script>
+<script src="assets/agent.js?v=20261020c"></script>
 </body>
 </html>

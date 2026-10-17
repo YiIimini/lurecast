@@ -442,6 +442,30 @@
     return m <= 400 ? 100 : m <= 1000 ? 88 : m <= 2000 ? 74 : m <= 3500 ? 58 : 42;
   }
 
+  /* 每个点一个能认出来的名字：水域 + 方位 + 岸型（同一片水域的 6 个点不再同名） */
+  function spotTitle(c, formShort) {
+    var type = String(formShort || '').replace(/^(弱|中|强)/, '');
+    var dir = compass(c.bearingFromMe);
+    return (c.name ? c.name + ' · ' : '') + dir + type;
+  }
+
+  /* 按这个点真实的地形/风况挑拟饵，而不是所有点都甩同一套三条。
+     规则是路亚常识：陡坎贴底、浅滩打水面、深水抽铁板、迎风远投亮片、背风轻饵慢抽。 */
+  function pickLures(c, ctx, sp) {
+    var base = (sp && sp.lures ? sp.lures.slice() : []);
+    var d = c.depth20, s = c.slopePct, w = ctx && ctx.windSpeed;
+    var extra = [];
+    if (s != null && s >= 12) extra.push('德州/倒吊贴底打坎（陡岸落差大）');
+    if (d != null && d >= 6) extra.push('铁板 20–30g 抽停（近岸就有 6 m+）');
+    else if (d != null && d >= 3) extra.push('VIB 震动饵搜中下层');
+    else if (d != null && d <= 1.5) extra.push('水面铅笔/波爬打浅滩');
+    if (c.windward === true && w != null && w >= 3) extra.push('亮片 15g 顺风远投（风把饵鱼推过来）');
+    else if (c.windward === false) extra.push('轻量米诺慢抽（背风水面稳）');
+    var out = [];
+    extra.concat(base).forEach(function (t) { if (t && out.indexOf(t) < 0) out.push(t); });
+    return out.slice(0, 3);
+  }
+
   function pickSpots(cands, ctx) {
     var out = [];
     cands.forEach(function (c) {
@@ -467,23 +491,46 @@
         .slice(0, 2).map(function (p) { return p.txt; });
       if (satHit) reasons.push('历史影像：' + satHit.text + '（约 ' + Math.round(satHit.d) + ' m）');
       if (c.distToMe <= 900) reasons.push('离你 ' + fmtDist(c.distToMe) + '，步行/短途即可下竿');
-      out.push({
-        id: c.id, lat: c.lat, lon: c.lon, name: c.name, kind: c.kind,
-        formText: c.form === 'point' ? ((c.formStrength || '') + '岬角')
-          : c.form === 'bay' ? ((c.formStrength || '') + '湾')
-            : (c.linear ? '河段' : '直岸'),
-        tags: buildTags(c),
-        spotScore: Math.round(clamp(total, 0, 100)),
-        structScore: Math.round(st.score),
-        distToMe: c.distToMe, bearingFromMe: c.bearingFromMe,
-        slopePct: c.slopePct, depth20: c.depth20,
-        windward: c.windward, waterBearing: c.waterBearing,
-        reasons: reasons,
-        lure: sp.lures,
-        cand: c
-      });
+      /* 每个点自己的实测数值，卡片上就能对上（DEM 采样 + 距离/方位），不会再像模板文案 */
+      if (c.slopePct != null) {
+        reasons.push('岸坡 ' + Math.round(c.slopePct) + '%（岸上 120 m 高差），近岸 20 m 约 ' +
+          (c.depth20 != null ? c.depth20.toFixed(1) : '?') + ' m 深');
+      }
+    var formShort = c.form === 'point' ? ((c.formStrength || '') + '岬角')
+      : c.form === 'bay' ? ((c.formStrength || '') + '湾')
+        : (c.linear ? '河段' : '直岸');
+    out.push({
+      id: c.id, lat: c.lat, lon: c.lon, name: c.name, kind: c.kind,
+      formText: formShort,
+      /* 标题带上方位，让同一片水域的几个点一眼能分开（原来 6 个点全叫「千岛湖 · 中岬角」） */
+      title: spotTitle(c, formShort),
+      tags: buildTags(c),
+      spotScore: Math.round(clamp(total, 0, 100)),
+      structScore: Math.round(st.score),
+      distToMe: c.distToMe, bearingFromMe: c.bearingFromMe,
+      slopePct: c.slopePct, depth20: c.depth20,
+      windward: c.windward, waterBearing: c.waterBearing,
+      reasons: reasons,
+      lure: pickLures(c, ctx, sp),
+      cand: c
     });
-    out.sort(function (a, b) { return b.spotScore - a.spotScore; });
+  });
+  out.sort(function (a, b) { return b.spotScore - a.spotScore; });
+
+  /* 相对比较：同一批里最陡/最深/最最近的点，理由里明说，避免每个点都说同一句话 */
+  if (out.length > 1) {
+    var bySlope = out.slice().sort(function (a, b) { return (b.slopePct || 0) - (a.slopePct || 0); })[0];
+    var byDepth = out.slice().sort(function (a, b) { return (b.depth20 || 0) - (a.depth20 || 0); })[0];
+    var byNear = out.slice().sort(function (a, b) { return a.distToMe - b.distToMe; })[0];
+    out.forEach(function (s, idx) {
+      if (s === byNear) s.reasons.unshift('本批最近的一个点，先到先打');
+      else if (s === bySlope) s.reasons.unshift('本批最陡的岸（岸坡 ' + Math.round(s.slopePct || 0) + '%），陡坎落差最大');
+      else if (s === byDepth) s.reasons.unshift('本批近岸最深（约 ' + (s.depth20 != null ? s.depth20.toFixed(1) : '?') + ' m），深水结构更靠边');
+      else s.reasons.unshift(
+        (s.windward ? '迎风岸，浪脚拍在岸上' : '背风侧，水面更稳') +
+        '；结构分 ' + s.structScore + '，离你 ' + fmtDist(s.distToMe));
+    });
+  }
 
     // 去重：同一条岸线上相距 < 150 m 的点只留分高的
     var keep = [];

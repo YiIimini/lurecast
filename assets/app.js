@@ -42,7 +42,7 @@
 
   /* 构建标记：每次发版改这里。页面上能看到它，一眼就能判断「我现在看的是不是旧版」。
      index.html 里资源 URL 上的 ?v= 要同步改，否则 Service Worker 会继续喂旧 JS/CSS。 */
- var BUILD = '2026-10-20 · r17';
+ var BUILD = '2026-10-20 · r19';
   var S = {
     me: null, place: null, tzOffset: 0,
     wx: null, sea: null, flood: null, osm: null,
@@ -837,12 +837,12 @@
       return '<button class="spot ' + lv + on + '" data-spot="' + i + '">' +
         '<span class="rank">' + (i + 1) + '</span>' +
         '<span class="spot-main">' +
-        '<span class="spot-title"><b>' + esc(s.name || '无名水域') + (s.formText ? ' · ' + esc(s.formText) : '') + '</b>' +
-        '<em>' + E.fmtDist(s.distToMe) + ' · ' + E.compass(s.bearingFromMe) + '面</em></span>' +
+        '<span class="spot-title"><b>' + esc(s.title || s.name || '无名水域') + '</b>' +
+        '<em>' + E.fmtDist(s.distToMe) + ' · ' + E.compass(s.bearingFromMe) + '面 · ' +
+        s.lat.toFixed(4) + ', ' + s.lon.toFixed(4) + '</em></span>' +
         '<span class="spot-tags">' + tags + '</span>' +
         '<span class="spot-why">' + esc(s.reasons.join('；')) + '</span>' +
         '<span class="spot-why">建议拟饵：' + esc(s.lure.join(' / ')) + '</span>' +
-        '</span>' +
         '<span class="spot-side"><b>' + s.spotScore + '</b><em>分</em></span>' +
         '</button>';
     }).join('');
@@ -1956,6 +1956,86 @@
     if (S.wx) { computeEnv(); rebuildSpots(); renderAll(); stampStatus(); }
   }
 
+  /* ------------------------------------------------ 版本与更新
+     为什么不能"仓库一改就自动更新"：安卓不允许 App 静默替换自己（必须走系统安装器），
+     而且这个仓库是私有的 —— APK 里不能内置 token 去读 raw/API。
+     所以做成"应用内检查 + 一键下载"：更新源填一个公开可访问的 version.json
+     或 GitHub Release API 链接，比较 build 号后把下载交给系统浏览器。 */
+  var UPDATE_KEY = 'lc:update:url';
+  function currentBuildNo() {
+    var m = String(BUILD).match(/r(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+  }
+  function initUpdateUI() {
+    var url = '';
+    try { url = Store.getItem(UPDATE_KEY) || ''; } catch (e) { /* 忽略 */ }
+    if ($('updateUrl')) {
+      $('updateUrl').value = url;
+      $('updateUrl').addEventListener('change', function () {
+        try { Store.setItem(UPDATE_KEY, $('updateUrl').value.trim()); } catch (e) { /* 忽略 */ }
+      });
+    }
+    if ($('verInfo')) {
+      $('verInfo').textContent = '当前版本 ' + BUILD + '（build ' + currentBuildNo() + '）· 网页版与安卓壳同一套界面';
+    }
+    if ($('btnCheckUpdate')) $('btnCheckUpdate').addEventListener('click', checkUpdate);
+  }
+
+  function checkUpdate() {
+    var url = '';
+    try { url = ($('updateUrl') && $('updateUrl').value.trim()) || Store.getItem(UPDATE_KEY) || ''; } catch (e) { url = ''; }
+    if (!url) {
+      window.UI.alert('还没有填更新源。\n\n两种填法：\n· 自己的 version.json（{"build":19,"apk":"…apk","notes":"…"}）\n'
+        + '· GitHub Release API：https://api.github.com/repos/owner/repo/releases/latest（仓库需公开）', { title: '先填更新源' });
+      return;
+    }
+    if ($('updateState')) $('updateState').textContent = '检查中…';
+    var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, 12000) : null;
+    fetch(url, { cache: 'no-store', signal: ctl ? ctl.signal : undefined })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (j) {
+        if (timer) clearTimeout(timer);
+        var build = parseInt(j.build, 10);
+        if (!isFinite(build)) build = parseInt(String(j.tag_name || '').replace(/\D+/g, ''), 10) || 0;
+        var apk = j.apk || '';
+        if (!apk && j.assets && j.assets.length) {
+          for (var i = 0; i < j.assets.length; i++) {
+            if (/\.apk$/i.test(j.assets[i].name || '')) { apk = j.assets[i].browser_download_url; break; }
+          }
+        }
+        var notes = String(j.notes || j.body || '').trim();
+        var page = j.url || j.html_url || '';
+        if (!build || !apk) throw new Error('返回里没有 build 与 apk 字段');
+        var cur = currentBuildNo();
+        if (build <= cur) {
+          if ($('updateState')) $('updateState').textContent = '已是最新（r' + cur + '）';
+          window.UI.alert('当前 r' + cur + ' 就是最新版本。', { title: '已是最新' });
+          return;
+        }
+        if ($('updateState')) $('updateState').textContent = '发现 r' + build;
+        var msg = '发现新版本 r' + build + '（当前 r' + cur + '）。' +
+          (notes ? '\n\n' + notes.slice(0, 400) : '') +
+          '\n\n点「去下载」用系统浏览器打开 APK 直链，下载完点一下安装即可覆盖升级（渔获与设置不会丢）。';
+        window.UI.confirm(msg, { title: '有新版本', okText: '去下载', cancelText: '以后再说' }).then(function (ok) {
+          if (!ok) return;
+          if (page) { try { window.LureCast.toast('正在打开下载…'); } catch (e) {} }
+          window.location.href = apk;   // 原生壳里 Capacitor 会交给系统浏览器
+        });
+      })
+      .catch(function (e) {
+        if (timer) clearTimeout(timer);
+        var msg = String(e && e.message ? e.message : e);
+        if (/abort/i.test(msg)) msg = '超时（12 s）';
+        if ($('updateState')) $('updateState').textContent = '检查失败';
+        window.UI.alert('检查更新失败：' + msg +
+          '\n\n常见原因：更新源不可公开访问（私有仓库需要 token，App 里不放 token）、'
+          + '返回不是 JSON、或直链不是 APK。', { title: '没检查成' });
+      });
+  }
   function initCfgUI() {
     // 1) 评分偏好
     var row = $('scoreRow');
@@ -2531,6 +2611,7 @@
     loadMapCfg();
     loadCfg();
     initCfgUI();
+    initUpdateUI();
     applyUi();
     applyBasemap();
     initFx();
