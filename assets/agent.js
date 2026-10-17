@@ -351,11 +351,13 @@
   }
 
   function emptyHtml() {
-    var ready = window.AI && window.AI.chatReady && window.AI.chatReady();
-    if (!ready) {
-      return '<div class="agempty"><b>先配一个大模型</b>' +
-        '<p>助手要一个支持「工具调用（function calling）」的模型。打开 <b>设置 → 识图 / 助手</b>，' +
-        '选厂商、填 Key 和对话模型名即可（DeepSeek、OpenAI、通义、豆包、智谱、Kimi、自建兼容服务都行）。</p>' +
+    var problem = window.AI && window.AI.chatProblem ? window.AI.chatProblem() : 'AI 模块没加载';
+    if (problem) {
+      return '<div class="agempty"><b>助手还差一步</b>' +
+        '<p>' + esc(problem) + '。</p>' +
+        '<p>识图那把 Key 助手直接就能用：<b>厂商选同一家、Key 不用重复填、模型名也不用改</b>——' +
+        'DeepSeek 的 <b>deepseek-flash</b>、OpenAI 的 <b>gpt-4o-mini</b>、Gemini 的 <b>gemini-2.0-flash</b> ' +
+        '本身就同时支持识图与工具调用。只有用了「不支持工具调用的视觉预览版」时，才需要在设置里单独填「对话模型」。</p>' +
         '<button class="act primary" id="btnAgToSet">打开设置</button></div>';
     }
     return '<div class="agempty"><b>问点什么？</b>' +
@@ -401,7 +403,12 @@
   function ask(text) {
     if (busy) return;
     if (!window.AI || !window.AI.chat) { alert('ai.js 没加载'); return; }
-    if (!window.AI.chatReady()) { renderLog(); var b = $('btnAgToSet'); if (b) b.click(); return; }
+    var problem = window.AI.chatProblem ? window.AI.chatProblem() : 'AI 模块没加载';
+    if (problem) {
+      renderLog();
+      try { window.LureCast.toast && window.LureCast.toast(problem); } catch (e) {}
+      return;
+    }
 
     uiLog.push({ role: 'user', text: text });
     saveHistory();
@@ -454,7 +461,7 @@
           var hint = '';
           if (/HTTP 401|invalid.*key|unauthor/i.test(msg)) hint = '\n（Key 无效或没权限：设置 → 识图 / 助手 里重新填。）';
           else if (/HTTP 404/i.test(msg)) hint = '\n（模型名或 baseURL 不对：对话模型名要填该厂商真实可用的模型。）';
-          else if (/tool|function/i.test(msg) && /400/.test(msg)) hint = '\n（这个模型可能不支持工具调用，换 deepseek-chat / gpt-4o-mini 这类。）';
+          else if (/tool|function/i.test(msg) && /400/.test(msg)) hint = '\n（这个模型名可能不支持工具调用：在设置 → 识图与助手里把「对话模型」填成该厂商通用的对话模型。）';
           else if (/Failed to fetch|NetworkError|timeout/i.test(msg)) hint = '\n（网络没通：换个网络，或在设置里换成能直连的服务。）';
           pushAssistant('调用失败：' + msg + hint, usedTools);
           usedTools = [];
@@ -541,10 +548,8 @@
   function stampModelNote() {
     var el = $('agModelNote');
     if (!el) return;
-    var ready = window.AI && window.AI.chatReady && window.AI.chatReady();
-    el.textContent = ready
-      ? '模型 ' + window.AI.chatModel() + ' · 读本机数据回答'
-      : '还没配模型 · 设置 → 识图与助手';
+    var problem = window.AI && window.AI.chatProblem ? window.AI.chatProblem() : 'AI 未加载';
+    el.textContent = problem ? problem : '模型 ' + window.AI.chatModel() + ' · 读本机数据回答';
   }
 
   window.Agent = {

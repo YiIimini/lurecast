@@ -157,6 +157,11 @@ cd android
   伪模型先要求 `bite_score / spots / app_status` → 三个工具在本机执行、结果以
   `{"环境分":85,"因子":[…]}` 回填 → 第二轮拿到 tool 消息后给结论；气泡上显示
   `查 · bite_score / 查 · spots / 查 · app_status` 三枚 chip；对话写进 `lc:agent`（IndexedDB）。
+  **模型口径（r12 修正）**：识图与助手共用同一个模型，不再给 DeepSeek 换成 `deepseek-chat`
+  （那个旧名已下线）。实测只填 DeepSeek 的 Key、模型名留空时：`chatModel = deepseek-flash`、
+  `chatReady = true`，请求打到 `https://api.deepseek.com/v1/chat/completions` 且 `model=deepseek-flash`，
+  面板顶部显示「模型 deepseek-flash」。只有遇到不支持工具调用的视觉预览版，用户才需要在
+  「对话模型」里单独填；占位提示会写「留空 = 用 deepseek-flash」。
   写操作 `set_water_type` 实测 `state.waterType` auto → river 并触发重算。
   Gemini 分支单独验过：URL 走 `models/<model>:generateContent`、`systemInstruction` 就位、
   参数类型转大写 `OBJECT`、15 条 functionDeclarations、`functionCall` 能解析回工具名。

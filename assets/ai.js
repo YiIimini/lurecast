@@ -16,16 +16,29 @@
   var KEY = 'lc:ai';
   var MAX_PX = 720;      // 发给模型前再压一次，省 token
 
+  /* 每个厂商只给一个默认模型：识图与助手默认都用它。
+     助手需要「工具调用」能力——像 DeepSeek 的 deepseek-flash、OpenAI 的 gpt-4o-mini、
+     Gemini 的 gemini-2.0-flash 本身就是通用的，不用分两个模型；
+     只有遇到「视觉预览版不支持工具调用」这类情况，用户才需要单独填「对话模型」。 */
   var PROVIDERS = [
-    { id: 'deepseek', name: 'DeepSeek（deepseek-flash，支持图片）', kind: 'openai',
+    { id: 'deepseek', name: 'DeepSeek（deepseek-flash）', kind: 'openai',
       base: 'https://api.deepseek.com/v1', model: 'deepseek-flash',
-      note: 'deepseek-flash 支持图片输入（JPEG/PNG/GIF/WebP，按文件内容判断格式）。旧模型名 deepseek-v4-flash-vision-exp 仍可调用，但已下线，请求由最新 Flash 承接。' },
-    { id: 'openai', name: 'OpenAI', kind: 'openai', base: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-    { id: 'gemini', name: 'Google Gemini', kind: 'gemini', base: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.0-flash' },
-    { id: 'qwen', name: '通义千问 VL（阿里）', kind: 'openai', base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-vl-max' },
-    { id: 'doubao', name: '豆包 视觉（火山方舟）', kind: 'openai', base: 'https://ark.cn-beijing.volces.com/api/v3', model: '', modelHint: '填你的推理接入点 ID（ep-xxx）' },
-    { id: 'zhipu', name: '智谱 GLM-4V', kind: 'openai', base: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4v-plus' },
-    { id: 'moonshot', name: 'Kimi 视觉（Moonshot）', kind: 'openai', base: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k-vision-preview' },
+      note: 'deepseek-flash 一个模型同时支持图片输入、推理与工具调用（JPEG/PNG/GIF/WebP，按文件内容判断格式），' +
+        '识图和助手都用它，不用分两个模型名。旧的 deepseek-chat / deepseek-v4-flash-vision-exp 已下线，请求由 Flash 承接。' },
+    { id: 'openai', name: 'OpenAI', kind: 'openai', base: 'https://api.openai.com/v1', model: 'gpt-4o-mini',
+      note: 'gpt-4o-mini 识图与工具调用都支持，一个模型够用。' },
+    { id: 'gemini', name: 'Google Gemini', kind: 'gemini',
+      base: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.0-flash',
+      note: 'gemini-2.0-flash 识图与 function calling 都支持。' },
+    { id: 'qwen', name: '通义千问（阿里）', kind: 'openai',
+      base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-vl-max' },
+    { id: 'doubao', name: '豆包（火山方舟）', kind: 'openai', base: 'https://ark.cn-beijing.volces.com/api/v3',
+      model: '', modelHint: '填你的推理接入点 ID（ep-xxx）',
+      note: '方舟的模型都是独立接入点（ep-xxx）：识图与助手共用一个接入点即可，除非你用了不支持工具调用的视觉预览接入点，那就在「对话模型」里换一个。' },
+    { id: 'zhipu', name: '智谱 GLM', kind: 'openai', base: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4v-plus' },
+    { id: 'moonshot', name: 'Kimi（Moonshot）', kind: 'openai', base: 'https://api.moonshot.cn/v1',
+      model: 'moonshot-v1-8k-vision-preview',
+      note: '注意：视觉预览版通常不支持工具调用，助手若报 400，请在「对话模型」里填 moonshot-v1-8k 这类文本模型。' },
     { id: 'custom', name: '自定义（OpenAI 兼容）', kind: 'openai', base: '', model: '', custom: true }
   ];
 
@@ -211,8 +224,21 @@
   /* ---------------- 对话（Agent 助手用，支持 function calling） ----------------
      与识图共用同一家厂商与同一把 Key；对话模型可以单独填（识图模型未必支持工具调用）。
      消息一律用 OpenAI 格式在内部流转，Gemini 在这里做一次转换。 */
-  function chatModel() { return cfg.chatModel || effectiveModel(); }
-  function chatReady() { var p = provider(); return !!(p && cfg.key && effectiveBase() && chatModel()); }
+  /* 助手用的模型：优先用户填的对话模型 → 厂商的通用对话模型（p.chat）→ 识图模型 */
+  function chatModel() {
+    var p = provider();
+    return cfg.chatModel || (p && p.chat) || effectiveModel();
+  }
+  function chatReady() { return !chatProblem(); }
+  /* 缺什么就说清楚（助手面板与发送前都用它，避免"一句没配模型"糊过去） */
+  function chatProblem() {
+    var p = provider();
+    if (!p) return '还没选厂商：设置 → 识图与助手';
+    if (!cfg.key) return '还没填 API Key：设置 → 识图与助手';
+    if (!effectiveBase()) return '自定义服务要填 baseURL';
+    if (!chatModel()) return '这个厂商要自己填「对话模型」名（例如 ep-xxxx / deepseek-chat）';
+    return null;
+  }
 
   function openaiChat(messages, opts) {
     opts = opts || {};
@@ -351,8 +377,9 @@
     }
     if ($('aiChatModelInput')) {
       $('aiChatModelInput').value = cfg.chatModel || '';
-      $('aiChatModelInput').style.display = p ? '' : 'none';
-      $('aiChatModelInput').placeholder = '对话模型（留空则用上面的），例如 deepseek-chat / gpt-4o-mini';
+      var useModel = effectiveModel();
+      $('aiChatModelInput').placeholder = (useModel ? '留空 = 用 ' + useModel : '填模型名')
+        + '（万一这个模型不支持工具调用，才在这里换一个）';
     }
     if ($('aiNote')) {
       $('aiNote').innerHTML = p
@@ -411,6 +438,6 @@
     bind: bind, load: load, save: save, cfg: function () { return cfg; },
     providers: PROVIDERS, provider: provider, ready: ready,
     identify: identify, renderSettings: renderSettings, matchSpecies: matchSpecies,
-    chat: chat, chatReady: chatReady, chatModel: chatModel
+    chat: chat, chatReady: chatReady, chatModel: chatModel, chatProblem: chatProblem
   };
 })();
