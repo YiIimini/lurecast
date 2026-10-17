@@ -195,6 +195,22 @@
 4. **安全**：迎风岸+大风、涨水、涨潮的礁石岸都有危险，评分只谈鱼口，不谈安全。
 5. 评分是启发式规则（工程经验 + 常见路亚逻辑），不是渔获统计模型；同一个点钓三次你比它准。
 
+## 版本管理（Git）
+
+仓库：**https://github.com/YiIimini/lurecast**（私有），主分支 `main`。
+
+```powershell
+git status                 # 看改动
+git add -A && git commit -m "说明这次改了什么"
+git push                   # main 已跟踪 origin/main，直接推
+```
+
+- **不跟踪**：`node_modules/`、`native/www/`、`native/android/**/build/`、`native/android/app/src/main/assets/public/`、
+  `*.apk`（`dist/` 里的产物用 `docs/ANDROID.md` 的配方重新构建）、`*.log`、本机私有配置。
+- **跟踪**：源码、`assets/vendor/geotiff.js`（随项目发布的依赖）、安卓工程（含图标与 `gradle-wrapper.jar`）、文档与脚本。
+- **换行**：`.gitattributes` 里源码强制 LF、`.ps1/.cmd` 强制 CRLF，避免 Windows 上脚本被改坏。
+- **构建配置**：`gradle-wrapper.properties` 提交的是官方地址，本机离线编译请用工具链里解压好的 gradle，别改这个文件（详见 `docs/ANDROID.md`）。
+
 ## 快速开始
 
 **网页版**

@@ -59,12 +59,20 @@ cd native\android
 # 产物: app\build\outputs\apk\debug\app-debug.apk
 ```
 
-### 两个坑（踩过，记下来）
+### 三个坑（踩过，记下来）
 
-1. **`services.gradle.org` / `downloads.gradle.org` 在 Java 里连不上**（PowerShell 能连，JVM 超时）。
-   解决：用 PowerShell 先把 `gradle-8.2.1-all.zip` 下到本地（腾讯镜像 `mirrors.cloud.tencent.com/gradle/` 3 秒下完），
-   再把 `gradle/wrapper/gradle-wrapper.properties` 的 `distributionUrl` 改成 `file:///…/gradle-8.2.1-all.zip`。
+1. **`services.gradle.org` 在 Java 里连不上**（PowerShell 能连，JVM 超时）。
+   解决 A（推荐、可离线）：用 PowerShell 下 `gradle-8.2.1-all.zip`（腾讯镜像 `mirrors.cloud.tencent.com/gradle/` 很快），
+   解压后直接用它编译，**不要动仓库里的 wrapper 配置**：
+   ```powershell
+   Expand-Archive gradle-8.2.1-all.zip -DestinationPath <工具目录>
+   <工具目录>\gradle-8.2.1\bin\gradle.bat assembleDebug --no-daemon
+   ```
+   解决 B：临时把 `gradle/wrapper/gradle-wrapper.properties` 的 `distributionUrl` 指到本地 zip（**改完记得还原再提交**，
+   仓库里这份必须指向官方地址，否则别人 clone 下来编不了）。
 2. **JVM 的 IPv6 握手失败**：加 `GRADLE_OPTS=-Djava.net.preferIPv4Stack=true` 后 Maven 依赖就能正常拉。
+3. **wrapper 指向本地路径会污染仓库**：`.gitignore` 不忽略它（它是构建配置），所以本地改过一定要还原——已用
+   `git show HEAD:native/android/gradle/wrapper/gradle-wrapper.properties` 校过，仓库里是官方地址。
 
 Android Studio 用户不需要这些：直接 `File → Open → native/android` 就会自动用自带的 JDK + SDK。
 
