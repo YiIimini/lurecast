@@ -42,7 +42,7 @@
 
   /* 构建标记：每次发版改这里。页面上能看到它，一眼就能判断「我现在看的是不是旧版」。
      index.html 里资源 URL 上的 ?v= 要同步改，否则 Service Worker 会继续喂旧 JS/CSS。 */
- var BUILD = '2026-10-19 · r8';
+ var BUILD = '2026-10-19 · r9';
   var S = {
     me: null, place: null, tzOffset: 0,
     wx: null, sea: null, flood: null, osm: null,
@@ -2175,6 +2175,12 @@
   function bind() {
     if ($('btnRefresh')) $('btnRefresh').addEventListener('click', function () { refresh(true); });
     if ($('btnHere')) $('btnHere').addEventListener('click', locate);
+    // 分享 / 外部导航（高德、百度、系统分享）
+    if ($('btnShareLoc')) $('btnShareLoc').addEventListener('click', openShareModal);
+    if ($('btnNavAmap')) $('btnNavAmap').addEventListener('click', function () { shareNav('amap'); });
+    if ($('btnNavBaidu')) $('btnNavBaidu').addEventListener('click', function () { shareNav('baidu'); });
+    if ($('btnShareText')) $('btnShareText').addEventListener('click', shareToApps);
+    if ($('btnCopyCoord')) $('btnCopyCoord').addEventListener('click', shareCoordText);
     if ($('btnManual')) $('btnManual').addEventListener('click', function () { renderManualFavs(); openModal('modalManual'); });
     if ($('btnFitMap')) $('btnFitMap').addEventListener('click', fitAll);
     if ($('btnMapFull')) $('btnMapFull').addEventListener('click', function () { mapFull(); });
@@ -2370,4 +2376,54 @@
     applyTabNames: applyTabNames, renderAll: renderAll, drawMap: drawMap, drawRoutes: drawRoutes,
     mapFull: mapFull
   };
+
+  /* ------------------------------------------------ 分享 / 外部导航 */
+  var toastTimer = 0;
+  function toast(msg) {
+    var el = $('toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('on'); }, 1900);
+  }
+
+  function placeLabel() {
+    var place = S.place || {};
+    return S.placeHint || place.name ||
+      (place.address && (place.address.city || place.address.town || place.address.county)) || '路亚钓点';
+  }
+
+  function openShareModal() {
+    if (!S.me) { toast('还没有坐标，先定位或点地图选点'); return; }
+    if ($('shareLatLon')) {
+      $('shareLatLon').textContent = S.me.lat.toFixed(5) + ', ' + S.me.lon.toFixed(5);
+    }
+    openModal('modalShare');
+  }
+
+  function shareNav(kind) {
+    if (!S.me || !window.CoShare) return;
+    var r = kind === 'amap'
+      ? CoShare.navAmap(S.me.lat, S.me.lon, placeLabel())
+      : CoShare.navBaidu(S.me.lat, S.me.lon, placeLabel());
+    if (r === 'web') toast('已打开网页版地图，选「到这里去」即可导航');
+  }
+
+  function shareCoordText() {
+    if (!S.me || !window.CoShare) return;
+    var g = CoShare.gcj02(S.me.lat, S.me.lon);
+    var text = S.me.lat.toFixed(5) + ', ' + S.me.lon.toFixed(5) +
+      '\n高德 ' + g.lat.toFixed(5) + ', ' + g.lon.toFixed(5) +
+      '\n' + CoShare.amapMarker(S.me.lat, S.me.lon, placeLabel());
+    CoShare.copy(text).then(function () { toast('坐标已复制，粘贴到聊天里即可'); });
+  }
+
+  function shareToApps() {
+    if (!S.me || !window.CoShare) return;
+    CoShare.share(S.me.lat, S.me.lon, placeLabel()).then(function (r) {
+      if (r === 'copy') toast('这台设备没有分享面板，坐标已复制');
+      else if (r === 'cancel') toast('已取消分享');
+    });
+  }
 })();

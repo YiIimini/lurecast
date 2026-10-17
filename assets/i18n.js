@@ -60,6 +60,23 @@
   'map.pick.ask': ['把这里设为当前位置？', '把這裡設為目前位置？', 'Use this point as your location?'],
   'map.pick.set': ['设为当前位置', '設為目前位置', 'Set as my location'],
 
+    'btn.share': ['分享', '分享', 'Share'],
+    'share.title': ['分享与导航', '分享與導航', 'Share & navigate'],
+    'share.amap': ['高德导航', '高德導航', 'Amap route'],
+    'share.amapSub': ['驾车到点', '駕車到點', 'Drive there'],
+    'share.baidu': ['百度导航', '百度導航', 'Baidu route'],
+    'share.baiduSub': ['驾车到点', '駕車到點', 'Drive there'],
+    'share.send': ['分享位置', '分享位置', 'Share location'],
+    'share.sendSub': ['微信 / QQ 等', '微信 / QQ 等', 'WeChat, QQ, …'],
+    'share.copy': ['复制坐标', '複製座標', 'Copy coordinates'],
+    'share.copySub': ['WGS-84 + 高德', 'WGS-84 + 高德', 'WGS-84 + GCJ-02'],
+    'share.ptNote': ['WGS-84 原始坐标 · 高德 / 百度在本机自动换算，不用手动纠偏',
+      'WGS-84 原始座標 · 高德 / 百度在本機自動換算，不用手動糾偏',
+      'Raw WGS-84 · Amap / Baidu converted on device'],
+    'share.hint': ['坐标按 WGS-84（GPS 口径）保存；高德要 GCJ-02、百度要 BD-09，点按钮时自动换算。没装对应的地图 App 会自动改成打开网页版地图。',
+      '座標按 WGS-84（GPS 口徑）保存；高德要 GCJ-02、百度要 BD-09，點按鈕時自動換算。沒裝對應的地圖 App 會自動改成打開網頁版地圖。',
+      'Coordinates are stored as WGS-84. Amap needs GCJ-02 and Baidu BD-09 — converted on the fly. If the map app is missing it falls back to the web map.'],
+
     'status.loading': ['正在取数据…', '正在取資料…', 'Loading…'],
     'status.needGps': ['等待定位…', '等待定位…', 'Waiting for GPS…'],
     'empty.loading': ['正在加载…', '正在載入…', 'Loading…'],
@@ -118,10 +135,20 @@
     });
     var btns = { btnRefreshLbl: 'btn.refresh', btnManualLbl: 'btn.findWater', btnHere: 'btn.gps',
       btnSavePlace: 'btn.savePlace', btnSat: 'btn.analyze', btnPickPhoto: 'btn.pickPhoto',
-      btnExportArchive: 'btn.exportArchive', btnImportArchive: 'btn.importArchive' };
+      btnExportArchive: 'btn.exportArchive', btnImportArchive: 'btn.importArchive',
+      btnShareLoc: 'btn.share' };
     Object.keys(btns).forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.textContent = t(btns[id]);
+    });
+    // 分享 / 导航弹窗（标题、格子标签、说明）
+    var shareParts = { shareTitle: 'share.title', lblNavAmap: 'share.amap', lblNavAmapSub: 'share.amapSub',
+      lblNavBaidu: 'share.baidu', lblNavBaiduSub: 'share.baiduSub', lblShareText: 'share.send',
+      lblShareTextSub: 'share.sendSub', lblCopyCoord: 'share.copy', lblCopyCoordSub: 'share.copySub',
+      shareHint: 'share.hint', sharePtNote: 'share.ptNote' };
+    Object.keys(shareParts).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = t(shareParts[id]);
     });
     // 标签页：用户改过名就优先用自定义名
     if (window.LureCast && window.LureCast.applyTabNames) window.LureCast.applyTabNames();
