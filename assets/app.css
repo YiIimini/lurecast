@@ -819,3 +819,141 @@ body.perf .moregrp { backdrop-filter: none; background: var(--panel-2); }
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
   mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
 }
+
+/* ---------------------------------------------------------- 悬浮 AI 助手球 */
+.aiOrb {
+  position: fixed; right: 16px; bottom: calc(22px + env(safe-area-inset-bottom));
+  width: 58px; height: 58px; z-index: 130;
+  display: grid; place-items: center; cursor: grab; touch-action: none;
+  --orb: var(--a1);
+  transition: opacity .22s ease, transform calc(.24s * var(--sp)) cubic-bezier(.22,.8,.28,1);
+  -webkit-tap-highlight-color: transparent;
+}
+.aiOrb.hidden { opacity: 0; pointer-events: none; transform: scale(.86); }
+.aiOrb.dragging { cursor: grabbing; transition: none; }
+.aiOrb.dragging .aiOrb-halo { opacity: .9; }
+
+/* 外层光晕：只动 transform/opacity */
+.aiOrb-halo {
+  position: absolute; inset: -14px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%,
+    color-mix(in srgb, var(--orb) 34%, transparent) 0%,
+    color-mix(in srgb, var(--orb) 12%, transparent) 46%,
+    transparent 70%);
+  filter: blur(6px);
+  animation: orbBreath 4.2s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+/* 旋转科技环：conic 渐变 + 遮罩做出一段亮弧 */
+.aiOrb-ring {
+  position: absolute; inset: -3px; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, var(--orb) 70%, transparent) 40deg,
+    transparent 96deg,
+    transparent 190deg,
+    color-mix(in srgb, var(--a2) 55%, transparent) 236deg,
+    transparent 300deg);
+  -webkit-mask: radial-gradient(closest-side, transparent 78%, #000 80%);
+  mask: radial-gradient(closest-side, transparent 78%, #000 80%);
+  animation: orbSpin 7.5s linear infinite;
+  will-change: transform;
+}
+
+.aiOrb-core {
+  position: relative; width: 46px; height: 46px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--orb);
+  border: 1px solid color-mix(in srgb, var(--orb) 46%, transparent);
+  background:
+    radial-gradient(120% 120% at 30% 20%, color-mix(in srgb, var(--orb) 20%, transparent), transparent 62%),
+    var(--panel-solid);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .14),
+    0 6px 18px -8px rgba(0, 0, 0, .95),
+    0 0 22px -8px color-mix(in srgb, var(--orb) 60%, transparent);
+  transition: transform calc(.2s * var(--sp)) cubic-bezier(.22,.8,.28,1), box-shadow .2s ease;
+}
+.aiOrb-core svg {
+  width: 21px; height: 21px; fill: none; stroke: currentColor;
+  stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+}
+.aiOrb:active .aiOrb-core { transform: scale(.94); }
+
+/* 状态点：固定状态色，不跟主题 */
+.aiOrb-dot {
+  position: absolute; right: 5px; top: 5px; width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--void); background: var(--ok);
+  box-shadow: 0 0 8px -1px color-mix(in srgb, var(--ok) 80%, transparent);
+}
+.aiOrb.setup .aiOrb-dot { background: var(--warn); box-shadow: 0 0 8px -1px color-mix(in srgb, var(--warn) 80%, transparent); }
+
+/* 有新回答时的数字徽标 */
+.aiOrb-badge {
+  position: absolute; right: -1px; bottom: -1px; min-width: 16px; height: 16px;
+  padding: 0 4px; border-radius: 999px; display: none;
+  align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; font-family: var(--mono); color: var(--void);
+  background: var(--ok); border: 2px solid var(--void);
+}
+.aiOrb.has-new .aiOrb-badge { display: inline-flex; }
+
+/* 思考中：环加速、光晕加快 */
+.aiOrb.busy .aiOrb-ring { animation-duration: 1.5s; }
+.aiOrb.busy .aiOrb-halo { animation-duration: 1.3s; }
+.aiOrb.busy .aiOrb-core { color: var(--a2); border-color: color-mix(in srgb, var(--a2) 55%, transparent); }
+
+/* 回答到了（面板关着）：一次成功闪 */
+.aiOrb.done .aiOrb-core {
+  color: var(--ok); border-color: color-mix(in srgb, var(--ok) 60%, transparent);
+  animation: orbDone .9s cubic-bezier(.22,.8,.28,1);
+}
+
+@keyframes orbSpin { to { transform: rotate(360deg); } }
+@keyframes orbBreath {
+  0%, 100% { transform: scale(.92); opacity: .55; }
+  50% { transform: scale(1.08); opacity: 1; }
+}
+@keyframes orbDone {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+/* 性能优先 / 系统减弱动效：停掉旋转与呼吸，只留静态光晕 */
+body.perf .aiOrb-halo, body.perf .aiOrb-ring,
+.aiOrb.reduced .aiOrb-halo, .aiOrb.reduced .aiOrb-ring { animation: none; }
+body.perf .aiOrb-core { backdrop-filter: none; }
+body.perf .aiOrb-halo { filter: none; opacity: .6; }
+@media (prefers-reduced-motion: reduce) {
+  .aiOrb-halo, .aiOrb-ring { animation: none; }
+}
+.aiOrb { z-index: 26; }   /* 在内容之上、弹窗(30)之下，别盖住弹窗 */
+/* 环加强：亮弧更实、更宽一点；核心加一圈虚线内环做"仪器"质感 */
+.aiOrb-ring {
+  inset: -4px;
+  background: conic-gradient(from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, var(--orb) 92%, transparent) 46deg,
+    rgba(255, 255, 255, .55) 58deg,
+    transparent 112deg,
+    transparent 198deg,
+    color-mix(in srgb, var(--a2) 80%, transparent) 244deg,
+    transparent 308deg);
+  -webkit-mask: radial-gradient(closest-side, transparent 74%, #000 76%);
+  mask: radial-gradient(closest-side, transparent 74%, #000 76%);
+}
+.aiOrb-halo {
+  background: radial-gradient(circle at 50% 50%,
+    color-mix(in srgb, var(--orb) 42%, transparent) 0%,
+    color-mix(in srgb, var(--orb) 16%, transparent) 46%,
+    transparent 72%);
+}
+.aiOrb-core::after {
+  content: ""; position: absolute; inset: 5px; border-radius: 50%; pointer-events: none;
+  border: 1px dashed color-mix(in srgb, var(--orb) 30%, transparent);
+  opacity: .75;
+}
+.aiOrb-dot { right: 4px; top: 4px; width: 8px; height: 8px; }

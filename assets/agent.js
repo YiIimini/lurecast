@@ -414,6 +414,7 @@
     saveHistory();
     renderLog();
     busy = true; abortFlag = false;
+    orbSet('busy');
     setBusyUI(true);
 
     var convo = [{ role: 'system', content: systemPrompt() }].concat(historyForModel());
@@ -453,6 +454,7 @@
           pushAssistant(answer, usedTools);
           usedTools = [];
           busy = false; setBusyUI(false);
+          orbSettle();
           checkActionEffects();
         })
         .catch(function (err) {
@@ -466,6 +468,7 @@
           pushAssistant('调用失败：' + msg + hint, usedTools);
           usedTools = [];
           busy = false; setBusyUI(false);
+          orbSettle();
         });
     };
     step(0);
@@ -542,6 +545,16 @@
       obs.observe(modal, { attributes: true, attributeFilter: ['class'] });
     }
     stampModelNote();
+    initOrb();
+    watchPanel();
+  }
+
+  /* 一轮问答结束后：面板开着就安静回 idle，面板关着就给一次「新回答」提示 */
+  function orbSettle() {
+    var panel = $('modalAgent');
+    var open = panel && !panel.classList.contains('hidden');
+    if (open) orbSet('idle');
+    else { orbSet('done'); orbBadge(orbNewCount + 1); }
   }
 
   /* 顶栏小字：显示当前对话模型，方便确认到底在用哪个 */
@@ -552,6 +565,152 @@
     el.textContent = problem ? problem : '模型 ' + window.AI.chatModel() + ' · 读本机数据回答';
   }
 
+  /* ---------------------------------------------------------- 悬浮助手球
+     可拖动、松手吸附最近一侧；位置与开关存在本机。
+     状态：idle / busy（思考中）/ done（面板关着时收到回答）。 */
+  var ORB_KEY = 'lc:orb';
+  var orbCfg = { on: true, side: 'right', y: null };
+  var orbEl = null, orbMoved = false, orbDownAt = null, orbDrag = null, orbNewCount = 0;
+
+  function loadOrbCfg() {
+    try {
+      var raw = Store.getItem(ORB_KEY);
+      if (!raw) return;
+      var o = JSON.parse(raw);
+      if (typeof o.on === 'boolean') orbCfg.on = o.on;
+      if (o.side === 'left' || o.side === 'right') orbCfg.side = o.side;
+      if (typeof o.y === 'number' && isFinite(o.y)) orbCfg.y = o.y;
+    } catch (e) { /* 默认显示在右下 */ }
+  }
+  function saveOrbCfg() {
+    try { Store.setItem(ORB_KEY, JSON.stringify(orbCfg)); } catch (e) { /* 忽略 */ }
+  }
+
+  function layoutOrb() {
+    if (!orbEl) return;
+    var vh = window.innerHeight || 800;
+    if (orbCfg.side === 'left') { orbEl.style.left = '16px'; orbEl.style.right = 'auto'; }
+    else { orbEl.style.right = '16px'; orbEl.style.left = 'auto'; }
+    if (typeof orbCfg.y === 'number') {
+      var y = Math.max(56, Math.min(vh - 110, orbCfg.y));
+      orbEl.style.top = y + 'px';
+      orbEl.style.bottom = 'auto';
+    } else {
+      orbEl.style.top = 'auto';
+      orbEl.style.bottom = '';
+    }
+  }
+
+  function syncOrb() {
+    if (!orbEl) return;
+    var panel = $('modalAgent');
+    var panelOpen = panel && !panel.classList.contains('hidden');
+    orbEl.classList.toggle('hidden', !orbCfg.on || !!panelOpen);
+    orbEl.classList.toggle('setup', !(window.AI && window.AI.chatReady && window.AI.chatReady()));
+    var chip = $('chkOrb');
+    if (chip) chip.classList.toggle('on', !!orbCfg.on);
+  }
+
+  function orbSet(state) {
+    if (!orbEl) return;
+    orbEl.classList.toggle('busy', state === 'busy');
+    orbEl.classList.toggle('done', state === 'done');
+    if (state !== 'done') orbEl.classList.remove('done');
+  }
+
+  function orbBadge(n) {
+    if (!orbEl) return;
+    orbNewCount = Math.max(0, n | 0);
+    orbEl.classList.toggle('has-new', orbNewCount > 0);
+    var b = $('aiOrbBadge');
+    if (b) b.textContent = orbNewCount > 9 ? '9+' : String(orbNewCount);
+  }
+
+  function initOrb() {
+    orbEl = $('aiOrb');
+    if (!orbEl) return;
+    loadOrbCfg();
+    layoutOrb();
+    syncOrb();
+    orbBadge(0);
+
+    var open = function () {
+      if (window.LureCast && window.LureCast.openModal) window.LureCast.openModal('modalAgent');
+      orbBadge(0);
+      orbSet('idle');
+      syncOrb();
+    };
+
+    orbEl.addEventListener('pointerdown', function (e) {
+      if (e.button != null && e.button !== 0) return;
+      orbMoved = false;
+      orbDownAt = { x: e.clientX, y: e.clientY };
+      var r = orbEl.getBoundingClientRect();
+      orbDrag = { x: e.clientX, y: e.clientY, left: r.left, top: r.top };
+      try { orbEl.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
+    });
+
+    orbEl.addEventListener('pointermove', function (e) {
+      if (!orbDrag) return;
+      var dx = e.clientX - orbDrag.x, dy = e.clientY - orbDrag.y;
+      if (!orbMoved && Math.abs(dx) + Math.abs(dy) < 7) return;
+      orbMoved = true;
+      orbEl.classList.add('dragging');
+      orbEl.style.left = (orbDrag.left + dx) + 'px';
+      orbEl.style.top = (orbDrag.top + dy) + 'px';
+      orbEl.style.right = 'auto';
+      orbEl.style.bottom = 'auto';
+    });
+
+    var finish = function (e) {
+      if (!orbDrag) return;
+      var wasMoved = orbMoved;
+      var r = orbEl.getBoundingClientRect();
+      orbEl.classList.remove('dragging');
+      orbDrag = null;
+      orbMoved = false;
+      if (wasMoved) {
+        // 吸附到最近的一侧，纵向位置记住
+        var mid = r.left + r.width / 2;
+        orbCfg.side = mid < (window.innerWidth / 2) ? 'left' : 'right';
+        orbCfg.y = Math.round(r.top);
+        saveOrbCfg();
+        layoutOrb();
+      } else if (orbDownAt) {
+        open();
+      }
+    };
+    orbEl.addEventListener('pointerup', finish);
+    orbEl.addEventListener('pointercancel', function () {
+      orbEl.classList.remove('dragging');
+      orbDrag = null; orbMoved = false;
+      layoutOrb();
+    });
+    orbEl.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+    window.addEventListener('resize', layoutOrb);
+
+    if ($('chkOrb')) $('chkOrb').addEventListener('click', function () {
+      orbCfg.on = !orbCfg.on;
+      saveOrbCfg();
+      syncOrb();
+      try { window.LureCast.toast && window.LureCast.toast(orbCfg.on ? '悬浮助手已打开' : '悬浮助手已收起'); } catch (e) {}
+    });
+    window.Agent.setOrb = function (on) { orbCfg.on = !!on; saveOrbCfg(); syncOrb(); };
+    window.Agent.orbState = orbSet;
+  }
+
+  /* 面板开合时同步悬浮球显隐与「有新回答」 */
+  function watchPanel() {
+    var panel = $('modalAgent');
+    if (!panel || !window.MutationObserver) return;
+    new MutationObserver(function () {
+      var open = !panel.classList.contains('hidden');
+      if (open) { orbBadge(0); orbSet(busy ? 'busy' : 'idle'); }
+      syncOrb();
+    }).observe(panel, { attributes: true, attributeFilter: ['class'] });
+  }
   window.Agent = {
     bind: bind, open: function () { if (window.LureCast && window.LureCast.openModal) window.LureCast.openModal('modalAgent'); },
     ask: ask, tools: TOOLS, schemas: schemas, clear: function () { uiLog = []; saveHistory(); renderLog(); }

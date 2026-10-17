@@ -13,8 +13,8 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="assets/theme.css?v=20261019e">
-<link rel="stylesheet" href="assets/app.css?v=20261019e">
+<link rel="stylesheet" href="assets/theme.css?v=20261019g">
+<link rel="stylesheet" href="assets/app.css?v=20261019g">
 </head>
 <body class="hoverable">
 <div class="app">
@@ -338,6 +338,12 @@
             <button class="chip" id="chkAurora">背景色斑</button>
           </div>
         </div>
+        <div class="field">
+          <label>AI 助手</label>
+          <div class="chiprow">
+            <button class="chip" id="chkOrb">悬浮助手 <em>可拖动</em></button>
+          </div>
+        </div>
         <details class="setgrp sub">
           <summary>分区改名（可选）</summary>
           <div class="tabnames">
@@ -545,20 +551,33 @@
 </div>
 
 <div id="ripples"></div>
+<!-- 悬浮 AI 助手球（可拖动、吸附最近边缘，位置与本机开关都存本地） -->
+<div class="aiOrb" id="aiOrb" role="button" tabindex="0" aria-label="AI 助手">
+  <span class="aiOrb-halo"></span>
+  <span class="aiOrb-ring"></span>
+  <span class="aiOrb-core">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3l1.8 4.6L18.4 9.4 13.8 11.2 12 15.8 10.2 11.2 5.6 9.4 10.2 7.6z"/>
+      <path d="M18 15l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>
+    </svg>
+  </span>
+  <span class="aiOrb-dot" id="aiOrbDot"></span>
+  <span class="aiOrb-badge" id="aiOrbBadge"></span>
+</div>
 <div id="tip" class="tip" role="tooltip"></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="assets/store.js?v=20261019e"></script>
-<script src="assets/api.js?v=20261019e"></script>
-<script src="assets/engine.js?v=20261019e"></script>
-<script src="assets/sat.js?v=20261019e"></script>
-<script src="assets/species.js?v=20261019e"></script>
-<script src="assets/i18n.js?v=20261019e"></script>
-<script src="assets/ai.js?v=20261019e"></script>
-<script src="assets/my.js?v=20261019e"></script>
-<script src="assets/share.js?v=20261019e"></script>
-<script src="assets/app.js?v=20261019e"></script>
-<script src="assets/agent.js?v=20261019e"></script>
+<script src="assets/store.js?v=20261019g"></script>
+<script src="assets/api.js?v=20261019g"></script>
+<script src="assets/engine.js?v=20261019g"></script>
+<script src="assets/sat.js?v=20261019g"></script>
+<script src="assets/species.js?v=20261019g"></script>
+<script src="assets/i18n.js?v=20261019g"></script>
+<script src="assets/ai.js?v=20261019g"></script>
+<script src="assets/my.js?v=20261019g"></script>
+<script src="assets/share.js?v=20261019g"></script>
+<script src="assets/app.js?v=20261019g"></script>
+<script src="assets/agent.js?v=20261019g"></script>
 </body>
 </html>
