@@ -13,8 +13,8 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="assets/theme.css?v=20261020f">
-<link rel="stylesheet" href="assets/app.css?v=20261020f">
+<link rel="stylesheet" href="assets/theme.css?v=20261020g">
+<link rel="stylesheet" href="assets/app.css?v=20261020g">
 </head>
 <body class="hoverable">
 <div class="app">
@@ -237,11 +237,15 @@
         <div class="card-head">
           <span class="ico"><i class="ic" data-icon="fishalt"></i></span>
           <h2>我的水族馆</h2>
-          <div class="head-right"><span class="card-note" id="aquaCount">0 / 25 种</span></div>
+          <div class="head-right">
+            <button class="act ghost icoact" id="btnAquaFull" data-tip="全屏看水族馆|把水箱铺满整屏，底部列出这个缸里每种鱼的名字。" aria-label="全屏看水族馆"><i class="ic ic-in" data-icon="expand"></i><i class="ic ic-out" data-icon="shrink"></i></button>
+            <span class="card-note" id="aquaCount">0 / 25 种</span>
+          </div>
         </div>
         <div class="aqua">
           <canvas id="aquaCanvas"></canvas>
           <div class="aqua-hint" id="aquaHint"><b>水族馆还是空的</b><p>拍照存档一条鱼，它就会游进这里。</p></div>
+          <div class="aqua-legend" id="aquaLegend"></div>
         </div>
         <div class="card-foot">每解锁一个新鱼种，水族馆里就多一条会游的鱼；「性能优先」模式下只画静态一帧。</div>
       </section>
@@ -615,18 +619,18 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="assets/store.js?v=20261020f"></script>
-<script src="assets/api.js?v=20261020f"></script>
-<script src="assets/engine.js?v=20261020f"></script>
-<script src="assets/sat.js?v=20261020f"></script>
-<script src="assets/species.js?v=20261020f"></script>
-<script src="assets/i18n.js?v=20261020f"></script>
-<script src="assets/ai.js?v=20261020f"></script>
-<script src="assets/my.js?v=20261020f"></script>
-<script src="assets/share.js?v=20261020f"></script>
-<script src="assets/ui.js?v=20261020f"></script>
-<script src="assets/icons.js?v=20261020f"></script>
-<script src="assets/app.js?v=20261020f"></script>
-<script src="assets/agent.js?v=20261020f"></script>
+<script src="assets/store.js?v=20261020g"></script>
+<script src="assets/api.js?v=20261020g"></script>
+<script src="assets/engine.js?v=20261020g"></script>
+<script src="assets/sat.js?v=20261020g"></script>
+<script src="assets/species.js?v=20261020g"></script>
+<script src="assets/i18n.js?v=20261020g"></script>
+<script src="assets/ai.js?v=20261020g"></script>
+<script src="assets/my.js?v=20261020g"></script>
+<script src="assets/share.js?v=20261020g"></script>
+<script src="assets/ui.js?v=20261020g"></script>
+<script src="assets/icons.js?v=20261020g"></script>
+<script src="assets/app.js?v=20261020g"></script>
+<script src="assets/agent.js?v=20261020g"></script>
 </body>
 </html>

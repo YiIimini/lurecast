@@ -615,6 +615,33 @@ body.perf .compass .streaks { display: none; }
 @media (max-width: 430px) { .aqua { height: 180px; } }
 body.perf .aqua-hint { backdrop-filter: none; }
 
+/* 水族馆全屏：与地图全屏同一套机制（.fs 铺满 + body 锁滚动 + 图标切换） */
+body.aquafs { overflow: hidden; }
+#cardAqua.fs {
+  position: fixed; inset: 0; z-index: 140; margin: 0; padding: 0;
+  border: 0; border-radius: 0; max-height: none;
+  display: flex; flex-direction: column;
+  background: var(--void);
+}
+#cardAqua.fs .card-head { padding: 12px 14px 9px; border-bottom: 1px solid var(--hair); }
+#cardAqua.fs .aqua {
+  flex: 1 1 auto; height: auto; min-height: 0;
+  border: 0; border-radius: 0; border-bottom: 1px solid var(--hair);
+}
+#cardAqua.fs .card-foot { padding: 7px 14px 12px; margin: 0; }
+#cardAqua.fs .icoact .ic-in { display: none; }
+#cardAqua.fs .icoact .ic-out { display: block; }
+.aqua-legend {
+  position: absolute; left: 0; right: 0; bottom: 0; display: none;
+  flex-wrap: wrap; gap: 4px 12px; padding: 14px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  font-size: var(--tiny); color: var(--ink-2);
+  background: linear-gradient(to top, rgba(4, 10, 18, .74), rgba(4, 10, 18, 0));
+  pointer-events: none;
+}
+#cardAqua.fs .aqua-legend { display: flex; }
+.aqua-legend i { display: inline-flex; align-items: center; gap: 5px; font-style: normal; }
+.aqua-legend s { width: 8px; height: 8px; border-radius: 50%; text-decoration: none; }
+
 /* 多图缩略 */
 .catchthumbs { position: relative; }
 .catchmore {

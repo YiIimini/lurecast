@@ -42,7 +42,7 @@
 
   /* 构建标记：每次发版改这里。页面上能看到它，一眼就能判断「我现在看的是不是旧版」。
      index.html 里资源 URL 上的 ?v= 要同步改，否则 Service Worker 会继续喂旧 JS/CSS。 */
- var BUILD = '2026-10-20 · r22';
+ var BUILD = '2026-10-20 · r23';
   var S = {
     me: null, place: null, tzOffset: 0,
     wx: null, sea: null, flood: null, osm: null,
@@ -2471,7 +2471,9 @@
     if (window.UI && window.UI.enhanceAll) window.UI.enhanceAll();
     if ($('btnMapFull')) $('btnMapFull').addEventListener('click', function () { mapFull(); });
     document.addEventListener('keydown', function (e) {
-      if ((e.key === 'Escape' || e.key === 'Esc') && $('cardMap') && $('cardMap').classList.contains('fs')) mapFull(false);
+      if (e.key !== 'Escape' && e.key !== 'Esc') return;
+      if (window.My && window.My.isAquaFull && window.My.isAquaFull()) { window.My.aquaFull(false); return; }
+      if ($('cardMap') && $('cardMap').classList.contains('fs')) mapFull(false);
     });
     if ($('btnSat')) $('btnSat').addEventListener('click', runSat);
     // 语言
@@ -2552,6 +2554,7 @@
     if (AppPlugin && AppPlugin.addListener) {
       // 安卓返回键：先关弹窗 → 再回「结论」→ 最后才退出
       AppPlugin.addListener('backButton', function () {
+        if (window.My && window.My.isAquaFull && window.My.isAquaFull()) { window.My.aquaFull(false); return; }
         if ($('cardMap') && $('cardMap').classList.contains('fs')) { mapFull(false); return; }
         var open = document.querySelectorAll('.modal:not(.hidden)');
         if (open.length) {

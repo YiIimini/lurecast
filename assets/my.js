@@ -632,73 +632,335 @@
     return { w: w, h: h, ctx: ctx };
   }
 
-  /* 一条鱼：体、尾、背鳍、条纹、眼睛；带深度投影与明暗 */
-  function drawFish(ctx, f, t, W, H) {
+  /* ---------------------------------------------------------------- 鱼形
+     一条鱼长什么样，由「体征表」决定：体高/体长比、背腹弧度、尾形（叉/圆/方/月牙）、
+     背鳍与臀鳍（硬棘/连续/靠后/脂鳍/帆状）、花纹（横斑/斑点/纵带/斑块/细点）、
+     口位（上翘/大嘴/鸭嘴）与须。所以水族馆里游的是各自的鱼，不是同一个椭圆换颜色。 */
+  var FORM_DEFAULT = {
+    depth: 0.34, belly: 0.28, ped: 0.13, peakT: -0.02, peakB: 0.03,
+    tail: 'fork', lobe: 3.6, tailLen: 0.40,
+    dorsal: 'short', anal: 'short', mark: 'none', snout: 'mid'
+  };
+
+  /* 科级兜底：以后鱼种库加新鱼，没写体征也大致像它那一科 */
+  var FORM_BY_FAMILY = {
+    '鲤科': { depth: 0.36, belly: 0.30, dorsal: 'long', mark: 'none' },
+    '鲈科': { depth: 0.32, dorsal: 'spiny', mark: 'bars' },
+    '鲑科': { depth: 0.32, tail: 'square', adipose: true, mark: 'speckle' },
+    '鲭科': { depth: 0.26, tail: 'lunate', finlet: true, mark: 'none' },
+    '鲹科': { depth: 0.36, dorsal: 'short', mark: 'none' },
+    '鮨科': { depth: 0.44, tail: 'round', dorsal: 'spiny', mark: 'spots', snout: 'big' },
+    '鲶科': { depth: 0.28, tail: 'round', anal: 'long', mark: 'mottle', barbels: true, snout: 'wide' },
+    '鲿科': { depth: 0.30, dorsal: 'spiny', adipose: true, mark: 'mottle', barbels: true, snout: 'wide' },
+    '鳢科': { depth: 0.24, belly: 0.22, tail: 'round', dorsal: 'long', anal: 'long', mark: 'mottle', snout: 'wide' },
+    '狗鱼科': { depth: 0.22, tail: 'fork', dorsal: 'far', anal: 'far', mark: 'spots', snout: 'duckbill' },
+    '鲷科': { depth: 0.50, dorsal: 'spiny', dorsalH: 1.1, mark: 'bars' },
+    '慈鲷科': { depth: 0.46, tail: 'round', dorsal: 'spiny', mark: 'bars' },
+    '太阳鱼科': { depth: 0.42, dorsal: 'spiny', mark: 'lateral', snout: 'big' },
+    '牙鲆科': { depth: 0.52, belly: 0.50, ped: 0.16, tail: 'round', dorsal: 'long', anal: 'long', mark: 'mottle', flat: true, snout: 'wide' },
+    '军曹鱼科': { depth: 0.28, dorsal: 'spiny', mark: 'none' },
+    '尖吻鲈科': { depth: 0.34, tail: 'round', dorsal: 'spiny', mark: 'none', snout: 'big' },
+    '鲯鳅科': { depth: 0.38, dorsal: 'sail', mark: 'spots' },
+    '狼鲈科': { depth: 0.30, dorsal: 'spiny', mark: 'none', snout: 'big' }
+  };
+
+  /* 逐种体征（覆盖科级兜底）。数值都是相对半体长 rx 的倍数 */
+  var FISH_FORM = {
+    bass: { depth: 0.42, belly: 0.34, dorsal: 'spiny', dorsalH: 0.95, mark: 'lateral', snout: 'big' },
+    topmouth: { depth: 0.26, belly: 0.22, ped: 0.09, tail: 'lunate', lobe: 4.2, tailLen: 0.40, dorsal: 'short', mark: 'none', snout: 'up' },
+    mandarin: { depth: 0.50, belly: 0.40, ped: 0.15, peakT: 0.08, peakB: 0.02, tail: 'round', dorsal: 'spiny', dorsalH: 0.80, mark: 'mottle', snout: 'big' },
+    snakehead: { depth: 0.24, belly: 0.22, ped: 0.12, tail: 'round', dorsal: 'long', anal: 'long', mark: 'mottle', snout: 'wide' },
+    zander: { depth: 0.28, ped: 0.10, tail: 'fork', lobe: 3.6, dorsal: 'spiny', adipose: true, mark: 'bars', snout: 'big', eyeShine: true },
+    trout: { depth: 0.32, tail: 'square', dorsal: 'short', adipose: true, mark: 'speckle', band: '#e0869a' },
+    chub: { depth: 0.28, ped: 0.10, tail: 'fork', mark: 'none' },
+    bleeker: { depth: 0.30, belly: 0.24, ped: 0.09, tail: 'fork', lobe: 4.0, tailLen: 0.36, mark: 'none' },
+    catfish: { depth: 0.26, tail: 'round', dorsal: 'short', anal: 'long', mark: 'mottle', barbels: true, snout: 'wide' },
+    yellowcat: { depth: 0.28, tail: 'fork', dorsal: 'spiny', adipose: true, mark: 'mottle', barbels: true, snout: 'wide' },
+    skygazer: { depth: 0.22, ped: 0.08, tail: 'fork', lobe: 3.4, dorsal: 'short', mark: 'none', snout: 'big' },
+    tilapia: { depth: 0.48, belly: 0.40, tail: 'round', dorsal: 'spiny', mark: 'bars' },
+    carp: { depth: 0.36, tail: 'fork', dorsal: 'long', mark: 'none', barbels: true },
+    crucian: { depth: 0.48, belly: 0.42, tail: 'fork', dorsal: 'long', mark: 'none' },
+    seabass: { depth: 0.30, tail: 'fork', dorsal: 'spiny', mark: 'none', snout: 'big' },
+    blackporgy: { depth: 0.52, belly: 0.42, tail: 'fork', dorsal: 'spiny', dorsalH: 1.15, mark: 'bars' },
+    grouper: { depth: 0.44, belly: 0.36, tail: 'round', dorsal: 'spiny', mark: 'spots', snout: 'big' },
+    flatfish: { depth: 0.52, belly: 0.50, ped: 0.16, peakT: 0.04, tail: 'round', dorsal: 'long', anal: 'long', mark: 'mottle', flat: true, snout: 'wide' },
+    spanishmackerel: { depth: 0.22, ped: 0.07, tail: 'lunate', lobe: 4.4, tailLen: 0.36, dorsal: 'short', finlet: true, mark: 'spots' },
+    yellowtail: { depth: 0.30, tail: 'lunate', lobe: 3.6, tailLen: 0.34, dorsal: 'short', finlet: true, mark: 'none' },
+    mahi: { depth: 0.38, tail: 'fork', dorsal: 'sail', mark: 'spots', snout: 'blunt' },
+    barramundi: { depth: 0.34, tail: 'round', dorsal: 'spiny', mark: 'none', snout: 'big' },
+    pike: { depth: 0.22, ped: 0.10, tail: 'fork', lobe: 3.2, dorsal: 'far', anal: 'far', mark: 'spots', snout: 'duckbill' },
+    cobia: { depth: 0.28, tail: 'fork', dorsal: 'spiny', mark: 'none', snout: 'wide' },
+    amberjack: { depth: 0.34, tail: 'fork', mark: 'band', band: '#e8c264' }
+  };
+
+  function formOf(sp) {
+    var out = {}, src = [FORM_DEFAULT, FORM_BY_FAMILY[sp.family], FISH_FORM[sp.id]];
+    for (var i = 0; i < src.length; i++) {
+      var o = src[i];
+      if (!o) continue;
+      for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) out[k] = o[k];
+    }
+    return out;
+  }
+
+  /* 明暗：amt<0 往黑走，>0 往白走 */
+  function shade(hex, amt) {
+    var h = String(hex || '#8fa3b6').replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var n = parseInt(h, 16);
+    if (!isFinite(n)) return hex;
+    var to = amt < 0 ? 0 : 255, p = Math.abs(amt);
+    var r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    r = Math.round(r + (to - r) * p); g = Math.round(g + (to - g) * p); b = Math.round(b + (to - b) * p);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+
+  function rnd(i) { var x = Math.sin(i * 127.1 + 3.7) * 43758.5453; return x - Math.floor(x); }
+
+  /* 身体轮廓：吻端 → 背线 → 尾柄 → 腹线 */
+  function bodyPath(ctx, rx, fm) {
+    var top = rx * fm.depth, bot = rx * fm.belly, ped = rx * fm.ped;
+    var peakT = rx * fm.peakT, peakB = rx * fm.peakB;
+    var snout = rx * (fm.snout === 'duckbill' ? 1.16 : 0.97);
+    ctx.beginPath();
+    ctx.moveTo(snout, -top * 0.05);
+    ctx.bezierCurveTo(rx * 0.58, -top * 0.78, peakT, -top, -rx * 0.30, -ped);
+    ctx.lineTo(-rx * 0.42, -ped * 0.82);
+    ctx.lineTo(-rx * 0.42, ped * 0.82);
+    ctx.lineTo(-rx * 0.30, ped);
+    ctx.bezierCurveTo(peakB, bot, rx * 0.58, bot * 0.78, snout, -top * 0.05);
+    ctx.closePath();
+  }
+
+  /* 尾鳍：叉尾 / 月牙 / 圆尾 / 方尾 */
+  function tailPath(ctx, rx, fm, wag) {
+    var x0 = -rx * 0.42, ped = rx * fm.ped;
+    var tl = rx * (fm.tailLen != null ? fm.tailLen : 0.30);
+    var lobe = ped * (fm.lobe || 3.0);
+    var t = fm.tail || 'fork';
+    ctx.beginPath();
+    if (t === 'round') {
+      ctx.moveTo(x0, -ped);
+      ctx.quadraticCurveTo(x0 - tl * 1.25, -lobe * 0.95 + wag, x0 - tl, wag * 0.8);
+      ctx.quadraticCurveTo(x0 - tl * 1.25, lobe * 0.95 + wag, x0, ped);
+    } else if (t === 'square') {
+      ctx.moveTo(x0, -ped);
+      ctx.lineTo(x0 - tl, -lobe * 0.85 + wag);
+      ctx.lineTo(x0 - tl, lobe * 0.85 + wag);
+      ctx.lineTo(x0, ped);
+    } else {
+      var deep = (t === 'lunate') ? 1.30 : 1.05;
+      ctx.moveTo(x0, -ped);
+      ctx.quadraticCurveTo(x0 - tl * 0.60, -lobe * 0.70 + wag * 0.5, x0 - tl * deep, -lobe + wag);
+      ctx.quadraticCurveTo(x0 - tl * 0.40, wag * 0.35, x0 - tl * 0.34, wag * 0.18);
+      ctx.quadraticCurveTo(x0 - tl * 0.40, wag * 0.35, x0 - tl * deep, lobe + wag);
+      ctx.quadraticCurveTo(x0 - tl * 0.60, lobe * 0.70 + wag * 0.5, x0, ped);
+    }
+    ctx.closePath();
+  }
+
+  /* 背鳍/臀鳍：spiny 硬棘 · long 连续长鳍 · sail 帆状 · far 靠后 · short 小块 · adipose 脂鳍 */
+  function finPath(ctx, rx, amp, kind, hScale) {
+    var h = amp * (hScale || 0.9);
+    ctx.beginPath();
+    if (kind === 'long') {
+      ctx.moveTo(rx * 0.34, -amp * 0.42);
+      ctx.quadraticCurveTo(rx * 0.00, -amp * 0.60 - h, -rx * 0.40, -amp * 0.30 - h * 0.55);
+      ctx.quadraticCurveTo(rx * 0.00, -amp * 0.44, rx * 0.34, -amp * 0.42);
+    } else if (kind === 'spiny') {
+      var x1 = rx * 0.30, x2 = -rx * 0.38, n = 6;
+      ctx.moveTo(x1, -amp * 0.52);
+      for (var i = 0; i <= n; i++) {
+        var xa = x1 + (x2 - x1) * (i / n);
+        var peak = -amp * 0.52 - h * (0.45 + 0.55 * Math.sin(Math.PI * (i + 0.5) / (n + 0.5)));
+        ctx.lineTo(xa, peak);
+        ctx.lineTo(xa - (x1 - x2) / (n * 2.4), -amp * 0.42);
+      }
+      ctx.lineTo(x2, -amp * 0.38);
+    } else if (kind === 'sail') {
+      ctx.moveTo(rx * 0.44, -amp * 0.30);
+      ctx.quadraticCurveTo(rx * 0.08, -amp * 0.55 - h * 2.1, -rx * 0.36, -amp * 0.34);
+      ctx.quadraticCurveTo(rx * 0.08, -amp * 0.40, rx * 0.44, -amp * 0.30);
+    } else if (kind === 'far') {
+      ctx.moveTo(-rx * 0.16, -amp * 0.52);
+      ctx.lineTo(-rx * 0.34, -amp * 0.52 - h * 0.85);
+      ctx.lineTo(-rx * 0.44, -amp * 0.34);
+    } else if (kind === 'adipose') {
+      ctx.moveTo(-rx * 0.20, -amp * 0.46);
+      ctx.quadraticCurveTo(-rx * 0.29, -amp * 0.46 - h * 0.75, -rx * 0.36, -amp * 0.36);
+    } else {
+      ctx.moveTo(rx * 0.08, -amp * 0.60);
+      ctx.quadraticCurveTo(-rx * 0.02, -amp * 0.60 - h * 0.95, -rx * 0.22, -amp * 0.50);
+    }
+    ctx.closePath();
+  }
+
+  /* 按体征画一条鱼 */
+  function drawFish(ctx, f, t, k) {
+    var sp = f.sp, fm = f.fm || formOf(sp);
     var z = f.z;
-    var base = 9 + f.size * 9;
-    var L = base * (0.5 + z * 0.95);
-    var Hh = L * 0.42;
-    var wag = Math.sin(t * 0.0045 * f.speed + f.phase) * Hh * 0.55;
+    var L = (9 + f.size * 9) * (0.5 + z * 0.95) * (k || 1);
+    var rx = L * 0.5;
+    var top = rx * fm.depth, bot = rx * fm.belly, ped = rx * fm.ped;
+    var wag = Math.sin(t * 0.0045 * f.speed + f.phase) * ped * 1.25;
+    var alpha = 0.35 + z * 0.6;
+    var bodyC = sp.color || '#8fa3b6', finC = sp.fin || '#7f93a6';
+
     ctx.save();
     ctx.translate(f.x, f.y);
     ctx.scale(f.dir, 1);
-    ctx.globalAlpha = 0.35 + z * 0.6;
+    ctx.globalAlpha = alpha;
 
-    // 贴近「水面」的鱼稍微压扁（俯视透视）
-    var squash = 0.82 + z * 0.18;
+    // 尾鳍
+    ctx.fillStyle = shade(finC, -0.06);
+    tailPath(ctx, rx, fm, wag);
+    ctx.fill();
 
-    // 尾巴
-    ctx.fillStyle = f.sp.fin || '#8fa3b6';
+    // 胸鳍（身体后侧露出一片）
+    ctx.fillStyle = shade(finC, 0.12);
     ctx.beginPath();
-    ctx.moveTo(-L * 0.42, 0);
-    ctx.lineTo(-L * 0.96, -Hh * 0.9 + wag);
-    ctx.lineTo(-L * 0.96, Hh * 0.9 + wag);
+    ctx.moveTo(rx * 0.34, top * 0.06);
+    ctx.quadraticCurveTo(rx * 0.02, top * 0.66, -rx * 0.04, top * 0.12);
     ctx.closePath();
     ctx.fill();
 
-    // 身体
-    ctx.fillStyle = f.sp.color || '#7d9a46';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, L * 0.5, Hh * 0.5 * squash, 0, 0, Math.PI * 2);
+    // 身体：上深下浅
+    var bg = ctx.createLinearGradient(0, -top, 0, bot);
+    bg.addColorStop(0, shade(bodyC, -0.34));
+    bg.addColorStop(0.55, bodyC);
+    bg.addColorStop(1, shade(bodyC, 0.30));
+    ctx.fillStyle = bg;
+    bodyPath(ctx, rx, fm);
     ctx.fill();
 
-    // 背鳍
-    ctx.fillStyle = f.sp.fin || '#5d7634';
-    ctx.beginPath();
-    ctx.moveTo(-L * 0.1, -Hh * 0.4 * squash);
-    ctx.lineTo(L * 0.06, -Hh * 0.95 * squash);
-    ctx.lineTo(L * 0.22, -Hh * 0.38 * squash);
-    ctx.closePath();
+    // 背鳍 / 臀鳍 / 脂鳍
+    ctx.fillStyle = shade(finC, -0.04);
+    finPath(ctx, rx, top, fm.dorsal || 'short', fm.dorsalH != null ? fm.dorsalH : 1.15);
     ctx.fill();
-
-    // 条纹
-    if (f.sp.stripe) {
-      ctx.globalAlpha = (0.35 + z * 0.6) * 0.35;
-      ctx.fillStyle = '#08121c';
-      for (var i = -1; i <= 1; i++) {
-        ctx.fillRect(i * L * 0.16 - L * 0.028, -Hh * 0.4 * squash, L * 0.056, Hh * 0.8 * squash);
-      }
-      ctx.globalAlpha = 0.35 + z * 0.6;
+    if (fm.adipose) { finPath(ctx, rx, top, 'adipose', 0.6); ctx.fill(); }
+    if (fm.anal && fm.anal !== 'none') {
+      ctx.save();
+      ctx.scale(1, -1);
+      finPath(ctx, rx, bot, fm.anal, 0.62);
+      ctx.fill();
+      ctx.restore();
     }
 
-    // 腹部高光
-    ctx.globalAlpha = (0.35 + z * 0.6) * 0.28;
-    ctx.fillStyle = '#dff3ff';
-    ctx.beginPath();
-    ctx.ellipse(-L * 0.02, Hh * 0.18 * squash, L * 0.34, Hh * 0.16 * squash, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 0.35 + z * 0.6;
+    // 花纹（裁在身体里）
+    if (fm.mark && fm.mark !== 'none') {
+      ctx.save();
+      bodyPath(ctx, rx, fm);
+      ctx.clip();
+      if (fm.mark === 'bars') {
+        ctx.fillStyle = 'rgba(8, 18, 28, .30)';
+        for (var i = 0; i < 5; i++) {
+          ctx.fillRect(rx * (0.42 - i * 0.20) - rx * 0.035, -top, rx * 0.07, top + bot);
+        }
+      } else if (fm.mark === 'spots') {
+        ctx.fillStyle = 'rgba(10, 20, 30, .34)';
+        for (var j = 0; j < 13; j++) {
+          ctx.beginPath();
+          ctx.arc(rx * (0.62 - rnd(j) * 1.05), (rnd(j + 7) - 0.5) * (top + bot) * 0.82,
+            rx * (0.035 + rnd(j + 13) * 0.035), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (fm.mark === 'lateral') {
+        ctx.fillStyle = 'rgba(8, 16, 26, .30)';
+        ctx.beginPath();
+        ctx.ellipse(-rx * 0.04, top * 0.08, rx * 0.62, top * 0.26, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (fm.mark === 'band') {
+        ctx.fillStyle = fm.band || '#e8c264';
+        ctx.globalAlpha = alpha * 0.5;
+        ctx.beginPath();
+        ctx.ellipse(-rx * 0.05, top * 0.06, rx * 0.66, top * 0.16, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = alpha;
+      } else if (fm.mark === 'mottle') {
+        ctx.fillStyle = 'rgba(8, 16, 24, .28)';
+        for (var k = 0; k < 7; k++) {
+          ctx.beginPath();
+          ctx.ellipse(rx * (0.55 - rnd(k + 21) * 0.90), (rnd(k + 31) - 0.5) * (top + bot) * 0.78,
+            rx * (0.06 + rnd(k + 41) * 0.08), rx * (0.05 + rnd(k + 51) * 0.06), rnd(k) * 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (fm.mark === 'speckle') {
+        if (fm.band) {
+          ctx.fillStyle = fm.band;
+          ctx.globalAlpha = alpha * 0.35;
+          ctx.beginPath();
+          ctx.ellipse(-rx * 0.05, top * 0.02, rx * 0.70, top * 0.20, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = alpha;
+        }
+        ctx.fillStyle = 'rgba(10, 18, 26, .38)';
+        for (var s = 0; s < 22; s++) {
+          ctx.beginPath();
+          ctx.arc(rx * (0.60 - rnd(s + 3) * 1.05), (rnd(s + 17) - 0.5) * (top + bot) * 0.86,
+            rx * 0.022, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
 
-    // 眼睛
-    ctx.fillStyle = '#0a1119';
+    // 眼睛（牙鲆双眼同侧）
+    var ex = rx * 0.60, ey = -top * 0.20;
+    ctx.fillStyle = '#07101a';
     ctx.beginPath();
-    ctx.arc(L * 0.33, -Hh * 0.08 * squash, Math.max(1, L * 0.05), 0, Math.PI * 2);
+    ctx.arc(ex, ey, Math.max(1.1, rx * 0.075), 0, Math.PI * 2);
     ctx.fill();
+    if (fm.flat) {
+      ctx.beginPath();
+      ctx.arc(ex - rx * 0.15, ey - top * 0.12, Math.max(1, rx * 0.06), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (fm.eyeShine) {
+      ctx.fillStyle = 'rgba(230, 245, 255, .85)';
+      ctx.beginPath();
+      ctx.arc(ex - rx * 0.02, ey - rx * 0.022, Math.max(0.6, rx * 0.028), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 口
+    ctx.strokeStyle = 'rgba(8, 14, 22, .5)';
+    ctx.lineWidth = Math.max(1, rx * 0.045);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    var mx = rx * (fm.snout === 'duckbill' ? 1.14 : 0.94);
+    if (fm.snout === 'big') {
+      ctx.moveTo(mx, -top * 0.02);
+      ctx.quadraticCurveTo(mx - rx * 0.30, -top * 0.06, mx - rx * 0.44, top * 0.12);
+    } else if (fm.snout === 'up') {
+      ctx.moveTo(mx, -top * 0.12);
+      ctx.quadraticCurveTo(mx - rx * 0.12, -top * 0.32, mx - rx * 0.22, -top * 0.40);
+    } else if (fm.snout === 'duckbill') {
+      ctx.moveTo(mx, top * 0.02);
+      ctx.lineTo(mx - rx * 0.50, top * 0.02);
+    } else {
+      ctx.moveTo(mx, top * 0.02);
+      ctx.lineTo(mx - rx * 0.18, top * 0.08);
+    }
+    ctx.stroke();
+
+    // 须（鲶科 / 鲤科）
+    if (fm.barbels) {
+      ctx.strokeStyle = shade(bodyC, -0.18);
+      ctx.lineWidth = Math.max(1, rx * 0.03);
+      ctx.beginPath();
+      ctx.moveTo(rx * 0.86, top * 0.06);
+      ctx.quadraticCurveTo(rx * 1.16, top * 0.30, rx * 1.10, top * 0.64);
+      ctx.moveTo(rx * 0.84, top * 0.10);
+      ctx.quadraticCurveTo(rx * 1.02, top * 0.44, rx * 0.94, top * 0.74);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
   function drawScene(g) {
     var ctx = g.ctx, W = g.w, H = g.h, t = aqua.t;
+    // 场景缩放：全屏时水箱大很多，鱼、光柱、水草都跟着放大，否则满屏小鱼点
+    var k = Math.min(2.4, Math.max(0.95, Math.max(W, H) / 340));
     var horizon = H * 0.22;
 
     // 水体：上浅下深
@@ -736,7 +998,7 @@
     ctx.globalCompositeOperation = 'lighter';
     for (var i = 0; i < 5; i++) {
       var bx = W * (0.08 + i * 0.21) + Math.sin(t * 0.00035 + i * 1.7) * 14;
-      var wid = 18 + Math.sin(t * 0.0006 + i) * 6;
+      var wid = (18 + Math.sin(t * 0.0006 + i) * 6) * Math.min(2.2, k);
       var lg = ctx.createLinearGradient(bx, 0, bx + wid * 2, H);
       lg.addColorStop(0, 'rgba(150, 235, 255, .16)');
       lg.addColorStop(1, 'rgba(150, 235, 255, 0)');
@@ -756,8 +1018,8 @@
     ctx.globalCompositeOperation = 'lighter';
     for (var c = 0; c < 14; c++) {
       var cx = (W * ((c * 0.137) % 1)) + Math.sin(t * 0.0009 + c) * 18;
-      var cy = H * 0.62 + Math.cos(t * 0.0011 + c * 2.1) * 8 + (c % 3) * 9;
-      var rr = 8 + Math.abs(Math.sin(t * 0.0015 + c)) * 12;
+      var cy = H * 0.62 + Math.cos(t * 0.0011 + c * 2.1) * 8 * k + (c % 3) * 9 * Math.min(1.8, k);
+      var rr = (8 + Math.abs(Math.sin(t * 0.0015 + c)) * 12) * Math.min(1.8, k);
       var cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, rr);
       cg.addColorStop(0, 'rgba(180, 240, 255, .10)');
       cg.addColorStop(1, 'rgba(180, 240, 255, 0)');
@@ -784,11 +1046,11 @@
     aqua.plants.forEach(function (pl) {
       var sway = Math.sin(t * 0.0014 + pl.phase) * 7;
       ctx.strokeStyle = pl.color;
-      ctx.lineWidth = pl.w;
+      ctx.lineWidth = pl.w * Math.min(1.6, k);
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(pl.x, H - 6);
-      ctx.quadraticCurveTo(pl.x + sway * 0.5, H - pl.h * 0.55, pl.x + sway, H - pl.h);
+      ctx.quadraticCurveTo(pl.x + sway * 0.5, H - pl.h * 0.55 * k, pl.x + sway, H - pl.h * k);
       ctx.stroke();
     });
     ctx.restore();
@@ -799,14 +1061,14 @@
       ctx.strokeStyle = 'rgba(190, 240, 255, .8)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(b.x, b.y, b.r * (0.6 + b.z), 0, Math.PI * 2);
+      ctx.arc(b.x, b.y, b.r * (0.6 + b.z) * Math.min(1.6, k), 0, Math.PI * 2);
       ctx.stroke();
     });
     ctx.globalAlpha = 1;
 
     // 鱼：远的先画
     aqua.fishes.slice().sort(function (a, b) { return a.z - b.z; })
-      .forEach(function (f) { drawFish(ctx, f, t, W, H); });
+      .forEach(function (f) { drawFish(ctx, f, t, k); });
 
     // 暗角，突出中间
     var vg = ctx.createRadialGradient(W * 0.5, H * 0.45, Math.min(W, H) * 0.25, W * 0.5, H * 0.5, Math.max(W, H) * 0.78);
@@ -847,15 +1109,17 @@
     aqua.fishes = buildFishes().map(function (f, i) {
       var z = 0.25 + Math.random() * 0.75;
       return {
-        sp: f.sp, size: f.size, phase: i * 1.7, z: z,
+        sp: f.sp, fm: formOf(f.sp), size: f.size, phase: i * 1.7, z: z,
         x: Math.random() * g0.w,
         y: 30 + z * (g0.h - 80) + Math.random() * 10,
         dir: Math.random() > 0.5 ? 1 : -1,
         speed: 0.2 + Math.random() * 0.35
       };
     });
+    // 气泡与水草按水箱大小加密（全屏时别空得发慌）
+    var sc = Math.min(2.2, Math.max(0.9, Math.max(g0.w, g0.h) / 380));
     aqua.bubbles = [];
-    for (var i = 0; i < 18; i++) {
+    for (var i = 0; i < Math.round(18 * sc); i++) {
       aqua.bubbles.push({
         x: Math.random() * g0.w, y: Math.random() * g0.h,
         r: 0.8 + Math.random() * 2.2, v: 0.25 + Math.random() * 0.5,
@@ -863,12 +1127,12 @@
       });
     }
     aqua.plants = [];
-    for (var k = 0; k < 7; k++) {
+    for (var pk = 0; pk < Math.round(7 * sc); pk++) {
       aqua.plants.push({
-        x: g0.w * (0.05 + k * 0.14) + (Math.random() * 12 - 6),
+        x: g0.w * ((pk * 0.14) % 1) + (Math.random() * 12 - 6),
         h: 24 + Math.random() * 34, w: 1.6 + Math.random() * 1.4,
         phase: Math.random() * 6,
-        color: ['#1d5a3f', '#256b4a', '#174a36'][k % 3]
+        color: ['#1d5a3f', '#256b4a', '#174a36'][pk % 3]
       });
     }
     var hint = $('aquaHint');
@@ -876,6 +1140,20 @@
       var got = Object.keys(unlockedMap()).length;
       hint.style.display = got ? 'none' : 'flex';
       hint.innerHTML = '<b>水族馆还是空的</b><p>拍照存档一条鱼，它就会游进这里。</p>';
+    }
+
+    // 全屏时显示的鱼种图例：是什么鱼就写什么名，颜色对得上水里那条
+    var lg = $('aquaLegend');
+    if (lg) {
+      var seen = {}, items = [];
+      aqua.fishes.forEach(function (f) {
+        if (seen[f.sp.id]) return;
+        seen[f.sp.id] = 1;
+        items.push(f.sp);
+      });
+      lg.innerHTML = items.map(function (sp) {
+        return '<i><s style="background:' + (sp.color || '#8fa3b6') + '"></s>' + esc(sp.zh) + '</i>';
+      }).join('');
     }
     if (document.body.classList.contains('perf')) {
       aqua.running = false;
@@ -907,9 +1185,27 @@
     renderAqua();
   }
 
+  /* ---------------------------------------------------------------- 水族馆全屏
+     与地图全屏同一套机制：卡片 .fs 固定铺满、body 锁滚动；退出三路（按钮 / ESC / 安卓返回）。 */
+  function isAquaFull() {
+    var c = $('cardAqua');
+    return !!(c && c.classList.contains('fs'));
+  }
+
+  function aquaFull(on) {
+    var card = $('cardAqua');
+    if (!card) return;
+    var want = (typeof on === 'boolean') ? on : !card.classList.contains('fs');
+    card.classList.toggle('fs', want);
+    document.body.classList.toggle('aquafs', want);
+    // 画布按 clientWidth 每帧重算，所以只要让鱼重新布点即可（水草/气泡按新尺寸重排）
+    if (want) startAqua();
+    else if (st().tab === 'me') startAqua();
+  }
+
   function onTab(name) {
     if (name === 'me') { startAqua(); renderFav(); renderCatch(); }
-    else stopAqua();
+    else { if (isAquaFull()) aquaFull(false); stopAqua(); }
   }
 
   function bindPhotoInput(el) {
@@ -959,6 +1255,8 @@
     window.addEventListener('resize', function () {
       if (st().tab === 'me') { stopAqua(); startAqua(); }
     });
+    var aqBtn = $('btnAquaFull');
+    if (aqBtn) aqBtn.addEventListener('click', function () { aquaFull(); });
     document.addEventListener('visibilitychange', function () {
       if (document.hidden) stopAqua();
       else if (st().tab === 'me') startAqua();
@@ -968,6 +1266,7 @@
   window.My = {
     init: init, render: render, onTab: onTab,
     renderFav: renderFav, renderCatch: renderCatch, renderAqua: renderAqua,
+    aquaFull: aquaFull, isAquaFull: isAquaFull,
     saveCurrentPlace: saveCurrentPlace,
     catches: catches, favorites: favList, unlocked: function () { return Object.keys(unlockedMap()); },
     openCatchDetail: openCatchDetail, renderFav: renderFav,
