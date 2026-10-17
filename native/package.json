@@ -1,0 +1,23 @@
+{
+  "name": "lurecast-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LureCast 路亚潮汐 · 安卓壳（Capacitor）",
+  "scripts": {
+    "sync-web": "node sync-web.mjs",
+    "android:add": "npm run sync-web && cap add android",
+    "android:sync": "npm run sync-web && cap sync android",
+    "android:open": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/app": "^6.0.3",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/filesystem": "^6.0.4",
+    "@capacitor/geolocation": "^6.0.1",
+    "@capacitor/share": "^6.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}

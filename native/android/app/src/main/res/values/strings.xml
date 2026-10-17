@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">LureCast</string>
+    <string name="title_activity_main">LureCast 路亚潮汐</string>
+    <string name="package_name">com.lurecast.app</string>
+    <string name="custom_url_scheme">com.lurecast.app</string>
+</resources>

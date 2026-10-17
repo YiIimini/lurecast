@@ -1,0 +1,31 @@
+# ---- 依赖与构建产物 ----
+node_modules/
+native/node_modules/
+native/www/
+native/android/app/src/main/assets/public/
+native/android/.gradle/
+native/android/app/.gradle/
+native/android/build/
+native/android/app/build/
+native/android/.idea/
+native/android/local.properties
+*.apk
+*.aab
+*.iml
+
+# ---- 运行时/临时 ----
+*.log
+logs/
+.DS_Store
+Thumbs.db
+*.tmp
+~$*
+
+# ---- 本机私有配置（可能含 Key） ----
+.env
+.env.*
+*.local.json
+
+# ---- 说明 ----
+# dist/ 里的 APK 是构建产物，用 native/android 下的 gradlew 重新生成；
+# assets/vendor/geotiff.js 是随项目发布的依赖，必须提交。

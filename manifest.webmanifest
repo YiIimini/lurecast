@@ -1,0 +1,18 @@
+{
+  "name": "LureCast 路亚潮汐",
+  "short_name": "LureCast",
+  "description": "路亚钓点推荐：实时定位 + 天气 + 水位/潮流 + 岸坡地形结构，给出可解释的钓点评分",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#060911",
+  "theme_color": "#060911",
+  "lang": "zh-CN",
+  "categories": ["sports", "weather", "travel"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

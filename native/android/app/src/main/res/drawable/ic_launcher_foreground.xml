@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- LureCast 自适应图标前景：矢量画，任意密度都清晰。
+     64 单位坐标里画鱼，用 group 缩放 1.25 并居中到 108dp 画布的安全区（直径 66dp）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:scaleX="1.25"
+        android:scaleY="1.25"
+        android:translateX="15.9"
+        android:translateY="16.5">
+
+        <!-- 鱼身（青 → 薄荷 渐变） -->
+        <path android:pathData="M15,29a14,7 0 1,0 28,0a14,7 0 1,0 -28,0Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="15" android:startY="22"
+                    android:endX="43" android:endY="36"
+                    android:startColor="#FF5BE7FF"
+                    android:endColor="#FF6FF2C4" />
+            </aapt:attr>
+        </path>
+
+        <!-- 尾鳍 -->
+        <path
+            android:pathData="M41,29L52,22L52,36Z"
+            android:fillColor="#FF9B8CFF" />
+
+        <!-- 背鳍 -->
+        <path
+            android:pathData="M28,21L35,14L36,22Z"
+            android:fillColor="#D96FF2C4" />
+
+        <!-- 眼睛 -->
+        <path
+            android:pathData="M18.1,28a1.9,1.9 0 1,0 3.8,0a1.9,1.9 0 1,0 -3.8,0Z"
+            android:fillColor="#FF060911" />
+
+        <!-- 鱼钩：线 + 弯钩 -->
+        <path
+            android:pathData="M15,29L9.5,21.5"
+            android:strokeColor="#CCE9F1FF"
+            android:strokeWidth="1.7"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M9.5,21.5C6.6,17.6 10.4,14.4 12.6,16.6"
+            android:strokeColor="#CCE9F1FF"
+            android:strokeWidth="1.7"
+            android:strokeLineCap="round" />
+    </group>
+</vector>
