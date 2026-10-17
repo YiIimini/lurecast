@@ -42,7 +42,7 @@
 
   /* 构建标记：每次发版改这里。页面上能看到它，一眼就能判断「我现在看的是不是旧版」。
      index.html 里资源 URL 上的 ?v= 要同步改，否则 Service Worker 会继续喂旧 JS/CSS。 */
- var BUILD = '2026-10-20 · r24';
+ var BUILD = '2026-10-20 · r25';
   var S = {
     me: null, place: null, tzOffset: 0,
     wx: null, sea: null, flood: null, osm: null,

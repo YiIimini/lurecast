@@ -623,15 +623,18 @@
   }
 
   function resizeAqua(canvas) {
-    var dpr = Math.min(2, window.devicePixelRatio || 1);
     var w = canvas.clientWidth || 320, h = canvas.clientHeight || 190;
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    // 像素预算：全屏时 824×1400 这种画布在低端机/软件渲染上会掉到个位数帧率
+    var budget = 430000;
+    if (w * h * dpr * dpr > budget) dpr = Math.max(1, Math.sqrt(budget / (w * h)));
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     var ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    aqua.dpr = dpr;
     return { w: w, h: h, ctx: ctx };
   }
-
   /* ---------------------------------------------------------------- 鱼形
      一条鱼长什么样，由「体征表」决定：体高/体长比、背腹弧度、尾形（叉/圆/方/月牙）、
      背鳍与臀鳍（硬棘/连续/靠后/脂鳍/帆状）、花纹（横斑/斑点/纵带/斑块/细点）、
@@ -1181,7 +1184,7 @@
      静态部分（水色、柔和光柱、远景水草剪影、沙床）预渲染到离屏画布，尺寸不变就不重画；
      每帧只画会动的东西：水面波光、沙上焦散、水草摆动、气泡、鱼。 */
   function buildBg(W, H) {
-    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var dpr = aqua.dpr || Math.min(2, window.devicePixelRatio || 1);
     var c = document.createElement('canvas');
     c.width = Math.round(W * dpr);
     c.height = Math.round(H * dpr);
@@ -1246,10 +1249,95 @@
     x.lineTo(W, H);
     x.closePath();
     x.fill();
+
+    // 胶片颗粒烘进背景：省掉每帧一次 'overlay' 全屏混合
+    var gp = x.createPattern(grainTile(), 'repeat');
+    if (gp) {
+      x.save();
+      x.globalCompositeOperation = 'overlay';
+      x.globalAlpha = 0.5;
+      x.fillStyle = gp;
+      x.fillRect(0, 0, W, H);
+      x.restore();
+    }
     return c;
   }
 
   /* 颗粒噪点贴图：只在首次生成，之后复用 */
+  /* ---------------------------------------------------------------- 写实贴图
+     25 种鱼的真实感照片是 ComfyUI 生成的（纯色背景 → 按键色差抠图 → 512px WebP）。
+     贴图缺失或未解码完成时自动退回上面的矢量画法，功能不依赖素材。 */
+  var SPRITES = {};
+  function spriteOf(sp) {
+    var s = SPRITES[sp.id];
+    if (s === undefined) {
+      s = new Image();
+      s.decoding = 'async';
+      s.src = 'assets/fish/' + sp.id + '.webp';
+      SPRITES[sp.id] = s;
+    }
+    return (s.complete && s.naturalWidth) ? s : null;
+  }
+
+  /* 贴图鱼：切片错位模拟摆尾（头不动、尾摆幅最大），远处用模糊 + 低对比做景深 */
+  function drawFishSprite(ctx, f, t, k, farPass) {
+    var img = spriteOf(f.sp);
+    if (!img) { drawFish(ctx, f, t, k); return; }
+    var z = f.z;
+    var perf = document.body.classList.contains('perf');
+    var L = (16 + f.size * 15) * (0.55 + z * 0.95) * (k || 1) * (f.vary || 1);
+    var H = L * img.height / img.width;
+    var alpha = (0.45 + z * 0.55) * (farPass ? 0.92 : 1);
+    var bob = Math.sin(t * 0.0011 * f.speed + f.phase) * H * 0.05;
+    var tilt = Math.sin(t * 0.0009 * f.speed + f.phase) * 0.03;
+
+    ctx.save();
+    ctx.translate(f.x, f.y + bob);
+    ctx.scale(f.dir, 1);
+    ctx.rotate(tilt);
+    ctx.globalAlpha = alpha;
+
+    var lite = perf || aqua.lite;
+    var blur = (farPass && !lite) ? (0.9 + (0.42 - z) * 2.4) * (k > 1.4 ? 1 : 0.55) : 0;
+    if (blur > 0.15) ctx.filter = 'blur(' + blur.toFixed(2) + 'px)';
+
+    if (lite || blur > 0.15) {
+      ctx.drawImage(img, -L / 2, -H / 2, L, H);
+    } else {
+      // 身体一次画完，尾巴 5 段错位模拟摆动（越靠尾摆幅越大）
+      var tailFrom = 0.60;                       // 60% 之前是身体：一次画完
+      var bodyW = img.width * tailFrom;
+      ctx.drawImage(img, 0, 0, bodyW, img.height, -L / 2, -H / 2, L * tailFrom + 0.8, H);
+      var n = 5, sw = (img.width - bodyW) / n, dw = (L * (1 - tailFrom)) / n;
+      var amp = H * 0.10;
+      for (var i = 0; i < n; i++) {
+        var u = (i + 1) / n;
+        var dy = Math.sin(t * 0.0042 * f.speed + f.phase - u * 2.6) * amp * u * u;
+        ctx.drawImage(img, bodyW + i * sw, 0, sw, img.height,
+          -L / 2 + L * tailFrom + i * dw, -H / 2 + dy, dw + 0.8, H);
+      }
+    }
+    if (blur > 0.15) ctx.filter = 'none';
+    ctx.restore();
+  }
+  /* 焦散光斑贴图：预渲染一次，之后每帧只做 drawImage（比每帧建径向渐变快得多） */
+  var CAUSTIC = null;
+  function causticSprite() {
+    if (CAUSTIC) return CAUSTIC;
+    var c = document.createElement('canvas');
+    c.width = 128; c.height = 64;
+    var x = c.getContext('2d');
+    var g = x.createRadialGradient(64, 32, 0, 64, 32, 64);
+    g.addColorStop(0, 'rgba(170, 236, 255, .26)');
+    g.addColorStop(0.55, 'rgba(170, 236, 255, .10)');
+    g.addColorStop(1, 'rgba(170, 236, 255, 0)');
+    x.fillStyle = g;
+    x.beginPath();
+    x.ellipse(64, 32, 64, 32, 0, 0, Math.PI * 2);
+    x.fill();
+    CAUSTIC = c;
+    return c;
+  }
   function grainTile() {
     if (aqua.grain) return aqua.grain;
     var n = document.createElement('canvas');
@@ -1282,7 +1370,7 @@
     ctx.lineWidth = Math.max(1, k * 0.9);
     for (var s2 = 0; s2 < 3; s2++) {
       ctx.beginPath();
-      for (var x = 0; x <= W; x += 8) {
+      for (var x = 0; x <= W; x += 12) {
         var y = 5 * k + s2 * 4.5 * k + Math.sin((x * 0.045) + t * 0.0016 + s2) * 2.2 * k;
         x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
       }
@@ -1293,18 +1381,12 @@
     // 沙床上的焦散光斑
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    var n = perf ? 6 : 12;
+    var n = perf ? 4 : (aqua.lite ? 5 : 12);
     for (var c2 = 0; c2 < n; c2++) {
       var cx = (W * ((c2 * 0.137) % 1)) + Math.sin(t * 0.0009 + c2) * 16 * k;
       var cy = H * 0.90 + Math.cos(t * 0.0011 + c2 * 2.1) * 6 * k;
       var rr = (10 + Math.abs(Math.sin(t * 0.0015 + c2)) * 16) * k;
-      var cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, rr);
-      cg.addColorStop(0, 'rgba(170, 236, 255, .12)');
-      cg.addColorStop(1, 'rgba(170, 236, 255, 0)');
-      ctx.fillStyle = cg;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, rr * 1.6, rr * 0.45, 0, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.drawImage(causticSprite(), cx - rr * 1.6, cy - rr * 0.45, rr * 3.2, rr * 0.9);
     }
     ctx.restore();
 
@@ -1346,12 +1428,12 @@
     var sorted = aqua.fishes.slice().sort(function (a, b) { return a.z - b.z; });
     var far = [], near = [];
     sorted.forEach(function (f) { (f.z < 0.58 ? far : near).push(f); });
-    far.forEach(function (f) { drawFish(ctx, f, t, k); });
+    far.forEach(function (f) { drawFishSprite(ctx, f, t, k, true); });
     if (far.length && near.length) {
-      ctx.fillStyle = 'rgba(10, 48, 66, .22)';
+      ctx.fillStyle = 'rgba(10, 48, 66, .16)';
       ctx.fillRect(0, 0, W, H);
     }
-    near.forEach(function (f) { drawFish(ctx, f, t, k); });
+    near.forEach(function (f) { drawFishSprite(ctx, f, t, k, false); });
 
     // 底部水体雾 + 暗角，压住边缘、凸出中间
     var fg = ctx.createLinearGradient(0, H * 0.72, 0, H);
@@ -1365,26 +1447,27 @@
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, W, H);
 
-    // 极轻的胶片颗粒：数字画面太干净反而不像真实水下的照片
-    if (!perf) {
-      if (!aqua.grainPat) aqua.grainPat = ctx.createPattern(grainTile(), 'repeat');
-      if (aqua.grainPat) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'overlay';
-        ctx.globalAlpha = 0.45;
-        ctx.fillStyle = aqua.grainPat;
-        ctx.fillRect(0, 0, W, H);
-        ctx.restore();
-      }
-    }
+    // 胶片颗粒已经烘进背景图（每帧做 'overlay' 混合在低端机上太贵），这里不再逐帧叠
   }
 
   function stepAqua() {
     var canvas = $('aquaCanvas');
     if (!canvas || !aqua.running) return;
+    var now = (window.performance && performance.now) ? performance.now() : Date.now();
+    // 自适应画质：连续掉帧就降级（少焦散、关模糊、鱼整条画），恢复后再升回去
+    if (aqua.last) {
+      var dt = now - aqua.last;
+      aqua.avgDt = aqua.avgDt ? aqua.avgDt * 0.9 + dt * 0.1 : dt;
+      aqua.frames = (aqua.frames || 0) + 1;
+      if (aqua.frames > 30) {
+        if (aqua.avgDt > 34) aqua.lite = true;
+        else if (aqua.avgDt < 19) aqua.lite = false;
+      }
+    }
+    aqua.last = now;
     var g = resizeAqua(canvas);
     var W = g.w, H = g.h;
-    aqua.t += 16;
+    aqua.t += Math.min(48, aqua.last ? (aqua.avgDt || 16) : 16);
 
     aqua.fishes.forEach(function (f) {
       var speed = (0.18 + f.z * 0.55) * (0.7 + f.size * 0.4);
@@ -1417,6 +1500,8 @@
         speed: 0.2 + Math.random() * 0.35
       };
     });
+    // 预载这缸鱼的真实贴图（本地文件，解码完就替换掉矢量画法）
+    aqua.fishes.forEach(function (f) { spriteOf(f.sp); });
     // 气泡与水草按水箱大小加密（全屏时别空得发慌）
     var sc = Math.min(2.2, Math.max(0.9, Math.max(g0.w, g0.h) / 380));
     aqua.bubbles = [];
