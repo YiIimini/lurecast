@@ -16,8 +16,8 @@
 body.perf .titlebar { backdrop-filter: none; background: var(--void-2); }
 .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .brand-mark {
-  width: 26px; height: 26px; flex: 0 0 auto; border-radius: 9px; display: grid; place-items: center;
-  color: #04121c; font-weight: 700; font-size: var(--tiny);
+  width: 26px; height: 26px; flex: 0 0 auto; border-radius: 9px; display: block;
+  object-fit: cover; box-shadow: 0 0 0 1px var(--hair);
   background: linear-gradient(140deg, var(--a1), var(--a2) 70%);
 }
 .brand b { font-size: calc(15px * var(--fs) / 14px); letter-spacing: .02em; }

@@ -4,7 +4,7 @@
    · 静态资源用 cache-first + 后台更新：装过一次之后离线也能开。
    · 跨域接口（Open-Meteo / OSM / Sentinel-2 等）一律不进缓存，由 api.js 自己的分级缓存负责，
      保证「水文数据永远是最新一次成功请求」。 */
- var CACHE = 'lurecast-shell-v17';
+ var CACHE = 'lurecast-shell-v18';
 var SHELL = [
   './', './index.html',
   './assets/theme.css', './assets/app.css',
@@ -12,9 +12,8 @@ var SHELL = [
   './assets/sat.js', './assets/species.js', './assets/i18n.js',
   './assets/ai.js', './assets/my.js', './assets/share.js', './assets/ui.js', './assets/icons.js', './assets/app.js', './assets/agent.js',
   './assets/vendor/geotiff.js',
-  './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'
+  './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'
 ];
-
 self.addEventListener('install', function (e) {
   e.waitUntil(
     caches.open(CACHE)
