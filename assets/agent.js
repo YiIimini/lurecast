@@ -687,6 +687,12 @@
     orbEl.classList.toggle('setup', !(window.AI && window.AI.chatReady && window.AI.chatReady()));
     var chip = $('chkOrb');
     if (chip) chip.classList.toggle('on', !!orbCfg.on);
+    // 悬浮球开着就不再占顶栏：同一个助手留一个入口，避免两处重复
+    var topBtn = $('btnAgent');
+    if (topBtn) {
+      topBtn.style.display = orbCfg.on ? 'none' : '';
+      topBtn.setAttribute('aria-hidden', orbCfg.on ? 'true' : 'false');
+    }
   }
 
   function orbSet(state) {

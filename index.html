@@ -13,8 +13,8 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="assets/theme.css?v=20261020d">
-<link rel="stylesheet" href="assets/app.css?v=20261020d">
+<link rel="stylesheet" href="assets/theme.css?v=20261020e">
+<link rel="stylesheet" href="assets/app.css?v=20261020e">
 </head>
 <body class="hoverable">
 <div class="app">
@@ -97,19 +97,6 @@
             <div class="row" id="verdictBlips"></div>
           </div>
         </div>
-      </section>
-
-      <!-- 推荐钓点（核心） -->
-      <section class="card span2" data-tab="spots" data-fam="spot" id="cardSpot">
-        <div class="card-head">
-          <span class="ico"><i class="ic" data-icon="fish"></i></span>
-          <h2>推荐钓点</h2>
-          <div class="head-right"><span class="card-note" id="spotNote">按「环境 × 点位结构 × 可达性」排序</span></div>
-        </div>
-        <div class="spots" id="spotList">
-          <div class="empty"><b>还没有钓点数据</b><p>先定位或搜索一个水域；含岸线几何的湖泊/水库/河流才能算出岬角、岸坡与迎风岸。</p></div>
-        </div>
-        <div class="card-foot" id="spotFoot">点位结构由 OpenStreetMap 岸线 + Copernicus DEM 高程推断，不是水下实测地形。</div>
       </section>
 
       <!-- 24h 鱼口曲线 -->
@@ -238,7 +225,8 @@
           <h2>渔获档案 · 拍照解锁</h2>
           <div class="head-right"><span class="card-note" id="catchNote">本地存放</span></div>
         </div>
-        <input type="file" id="catchInput" accept="image/*" multiple capture="environment" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none">
+        <input type="file" id="catchCamera" accept="image/*" multiple capture="environment" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none">
+        <input type="file" id="catchInput" accept="image/*" multiple style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none">
         <input type="file" id="importInput" accept="application/json,.json" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none">
         <div id="catchBody"></div>
         <div class="card-foot">照片自动压到 480px 并只存这台设备；每条记录会带上当时的天气与鱼口指数。本地不做 AI 识别（避免认错鱼种），由你确认。</div>
@@ -281,6 +269,19 @@
           <i><s style="background:#ff9ecb"></s><span id="lgBoat">船钓直线</span></i>
         </div>
         <div class="card-foot">底图 <b id="mapSrcName">OSM 中文 · 深色</b> · 数据 © OpenStreetMap 贡献者</div>
+      </section>
+
+      <!-- 推荐钓点（核心） -->
+      <section class="card span2" data-tab="spots" data-fam="spot" id="cardSpot">
+        <div class="card-head">
+          <span class="ico"><i class="ic" data-icon="fish"></i></span>
+          <h2>推荐钓点</h2>
+          <div class="head-right"><span class="card-note" id="spotNote">按「环境 × 点位结构 × 可达性」排序</span></div>
+        </div>
+        <div class="spots" id="spotList">
+          <div class="empty"><b>还没有钓点数据</b><p>先定位或搜索一个水域；含岸线几何的湖泊/水库/河流才能算出岬角、岸坡与迎风岸。</p></div>
+        </div>
+        <div class="card-foot" id="spotFoot">点位结构由 OpenStreetMap 岸线 + Copernicus DEM 高程推断，不是水下实测地形。</div>
       </section>
 
       <!-- 我的：更多（默认收起）——环境分说明与数据来源都挪到这里 -->
@@ -614,18 +615,18 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="assets/store.js?v=20261020d"></script>
-<script src="assets/api.js?v=20261020d"></script>
-<script src="assets/engine.js?v=20261020d"></script>
-<script src="assets/sat.js?v=20261020d"></script>
-<script src="assets/species.js?v=20261020d"></script>
-<script src="assets/i18n.js?v=20261020d"></script>
-<script src="assets/ai.js?v=20261020d"></script>
-<script src="assets/my.js?v=20261020d"></script>
-<script src="assets/share.js?v=20261020d"></script>
-<script src="assets/ui.js?v=20261020d"></script>
-<script src="assets/icons.js?v=20261020d"></script>
-<script src="assets/app.js?v=20261020d"></script>
-<script src="assets/agent.js?v=20261020d"></script>
+<script src="assets/store.js?v=20261020e"></script>
+<script src="assets/api.js?v=20261020e"></script>
+<script src="assets/engine.js?v=20261020e"></script>
+<script src="assets/sat.js?v=20261020e"></script>
+<script src="assets/species.js?v=20261020e"></script>
+<script src="assets/i18n.js?v=20261020e"></script>
+<script src="assets/ai.js?v=20261020e"></script>
+<script src="assets/my.js?v=20261020e"></script>
+<script src="assets/share.js?v=20261020e"></script>
+<script src="assets/ui.js?v=20261020e"></script>
+<script src="assets/icons.js?v=20261020e"></script>
+<script src="assets/app.js?v=20261020e"></script>
+<script src="assets/agent.js?v=20261020e"></script>
 </body>
 </html>

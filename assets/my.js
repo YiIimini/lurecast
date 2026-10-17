@@ -319,14 +319,15 @@
 
     var html = '<div class="catchbar">' +
       '<span class="catchstat"><b>' + got + '</b> / ' + total + ' 种已解锁 · 共 ' + list.length + ' 条记录</span>' +
-      '<button class="act primary" id="btnPickPhoto">拍照 / 选图</button>' +
+      '<button class="act primary" id="btnPickPhoto">拍照</button>' +
+      '<button class="act ghost" id="btnPickAlbum">从相册选</button>' +
       '<button class="act ghost" id="btnExportArchive">导出档案</button>' +
       '<button class="act ghost" id="btnImportArchive">导入档案</button>' +
       '</div>';
 
     if (!list.length) {
       html += '<div class="empty"><b>还没有渔获档案</b>' +
-        '<p>钓到鱼就拍一张——照片只存这台设备，会记录当时的鱼种、尺寸、天气与鱼口指数。' +
+        '<p>钓到鱼就拍一张，或从相册里选一张——照片只存这台设备，会记录当时的鱼种、尺寸、天气与鱼口指数。' +
         '每解锁一个新鱼种，它就会游进下面的水族馆。</p></div>';
     } else {
       // 照片墙：点一张看详情
@@ -343,7 +344,8 @@
     }
     box.innerHTML = html;
 
-    if ($('btnPickPhoto')) $('btnPickPhoto').addEventListener('click', function () { if ($('catchInput')) $('catchInput').click(); });
+    if ($('btnPickPhoto')) $('btnPickPhoto').addEventListener('click', function () { if ($('catchCamera')) $('catchCamera').click(); });
+    if ($('btnPickAlbum')) $('btnPickAlbum').addEventListener('click', function () { if ($('catchInput')) $('catchInput').click(); });
     if ($('btnExportArchive')) $('btnExportArchive').addEventListener('click', exportArchive);
     if ($('btnImportArchive')) $('btnImportArchive').addEventListener('click', function () { if ($('importInput')) $('importInput').click(); });
     Array.prototype.forEach.call(box.querySelectorAll('[data-catchopen]'), function (b) {
@@ -910,22 +912,26 @@
     else stopAqua();
   }
 
-  function init() {
-    var input = $('catchInput');
-    if (input) {
-      input.addEventListener('change', function () {
-        var files = Array.prototype.slice.call(input.files || []).slice(0, 4);
-        input.value = '';
-        if (!files.length) return;
-        var box = $('catchBody');
-        if (box) box.innerHTML = '<p class="hint">正在压缩 ' + files.length + ' 张照片…</p>';
-        Promise.all(files.map(compressImage)).then(function (urls) {
-          openPicker(urls);
-        }).catch(function (err) {
-          if (box) box.innerHTML = '<p class="hint">照片处理失败：' + esc(err.message) + '</p>';
-        });
+  function bindPhotoInput(el) {
+    if (!el) return;
+    el.addEventListener('change', function () {
+      var files = Array.prototype.slice.call(el.files || []).slice(0, 4);
+      el.value = '';
+      if (!files.length) return;
+      var box = $('catchBody');
+      if (box) box.innerHTML = '<p class="hint">正在压缩 ' + files.length + ' 张照片…</p>';
+      Promise.all(files.map(compressImage)).then(function (urls) {
+        openPicker(urls);
+      }).catch(function (err) {
+        if (box) box.innerHTML = '<p class="hint">照片处理失败：' + esc(err.message) + '</p>';
       });
-    }
+    });
+  }
+
+  function init() {
+    // 拍照走 capture input（直接起相机）；选图走普通 input（系统给出相册/文件选择）
+    bindPhotoInput($('catchCamera'));
+    bindPhotoInput($('catchInput'));
     var imp = $('importInput');
     if (imp) {
       imp.addEventListener('change', function () {
