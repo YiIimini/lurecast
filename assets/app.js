@@ -42,7 +42,7 @@
 
   /* 构建标记：每次发版改这里。页面上能看到它，一眼就能判断「我现在看的是不是旧版」。
      index.html 里资源 URL 上的 ?v= 要同步改，否则 Service Worker 会继续喂旧 JS/CSS。 */
- var BUILD = '2026-10-20 · r23';
+ var BUILD = '2026-10-20 · r24';
   var S = {
     me: null, place: null, tzOffset: 0,
     wx: null, sea: null, flood: null, osm: null,
@@ -1069,7 +1069,7 @@
     if (w.mode === 'sea') {
       if (title) title.textContent = '潮汐与海况';
       if ($('waterNote')) $('waterNote').textContent = w.rate2h != null ? (w.rate2h > 0 ? '涨潮' : (w.rate2h < 0 ? '落潮' : '平潮')) : '--';
-      var sea = (S.sea.data && S.sea.data.current) || {};
+      var sea = (S.sea && S.sea.data && S.sea.data.current) || {};
       html += '<div class="statgrid">' +
         cell('潮位', w.tideLevel != null ? Math.round(w.tideLevel * 100) / 100 : '--', 'm', '相对平均海面') +
         cell('2h 变化', w.rate2h != null ? (w.rate2h > 0 ? '+' : '') + Math.round(w.rate2h * 100) / 100 : '--', 'm', w.phase + '潮') +
