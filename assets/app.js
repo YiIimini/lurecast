@@ -42,7 +42,7 @@
 
   /* 构建标记：每次发版改这里。页面上能看到它，一眼就能判断「我现在看的是不是旧版」。
      index.html 里资源 URL 上的 ?v= 要同步改，否则 Service Worker 会继续喂旧 JS/CSS。 */
-  var BUILD = '2026-10-18 · r7';
+ var BUILD = '2026-10-19 · r8';
   var S = {
     me: null, place: null, tzOffset: 0,
     wx: null, sea: null, flood: null, osm: null,
@@ -610,7 +610,7 @@
   function showSkeletons() {
     var msg = window.I18N ? I18N.t('empty.loading') : '正在加载…';
     skelInto($('weatherGrid'), 6);
-    if ($('windText')) skelInto($('windText').parentNode, 2);
+    skelInto($('windSkel'), 2);
     skelInto($('waterBody'), 4);
     skelInto($('terrainBody'), 6);
     skelInto($('timeBody'), 6);
@@ -851,12 +851,12 @@
     if (!arrow) { compass.raf = 0; return; }
     var diff = ((compass.target - compass.cur + 540) % 360) - 180;   // 走最短弧
     compass.cur = (compass.cur + diff * 0.12 + 360) % 360;
-    arrow.style.transform = 'rotate(' + compass.cur.toFixed(2) + 'deg)';
+    arrow.style.transform = 'rotate(' + ((compass.cur + 180) % 360).toFixed(2) + 'deg)';   // SVG 的针尖画在正下方，+180 才对得上正北朝上
     if (Math.abs(diff) > 0.3) {
       compass.raf = requestAnimationFrame(compassTick);
     } else {
       compass.cur = compass.target;
-      arrow.style.transform = 'rotate(' + compass.cur.toFixed(2) + 'deg)';
+      arrow.style.transform = 'rotate(' + ((compass.cur + 180) % 360).toFixed(2) + 'deg)';
       compass.raf = 0;
     }
   }
@@ -885,12 +885,13 @@
   function renderWind() {
     var cur = S.wx && S.wx.data && S.wx.data.current;
     if (!cur || cur.wind_speed_10m == null) {
-      skelInto($('windText') ? $('windText').parentNode : null, 2);
+      skelInto($('windSkel'), 2);
       return;
     }
     var from = cur.wind_direction_10m;
     var to = (from + 180) % 360;
     pointCompass(to);
+    if ($('windSkel')) $('windSkel').innerHTML = '';
     if ($('windNote')) $('windNote').textContent = Math.round(cur.wind_speed_10m) + ' m/s · 阵风 ' + Math.round(cur.wind_gusts_10m || 0);
 
     // 未来 1/3/6 小时
@@ -1130,6 +1131,7 @@
 
   /* ------------------------------------------------ 分区标签（结论 / 钓点 / 影像 / 数据） */
   function applyTab(name) {
+    if ($('cardMap') && $('cardMap').classList.contains('fs')) mapFull(false);
     S.tab = name || 'summary';
     Array.prototype.forEach.call(document.querySelectorAll('.cols > .card, .cols > .morewrap'), function (c) {
       c.classList.toggle('show', c.getAttribute('data-tab') === S.tab);
@@ -1560,6 +1562,21 @@
     var pts = [[S.me.lat, S.me.lon]];
     S.spots.slice(0, 8).forEach(function (s) { pts.push([s.lat, s.lon]); });
     S.map.fitBounds(pts, { padding: [28, 28], maxZoom: 16 });
+  }
+
+  /* ------------------------------------------------ 地图独立全屏 */
+  function mapFull(on) {
+    var card = $('cardMap');
+    if (!card) return;
+    var want = (typeof on === 'boolean') ? on : !card.classList.contains('fs');
+    if (want && !S.map) initMap();
+    card.classList.toggle('fs', want);
+    document.body.classList.toggle('mapfs', want);
+    // 进出各变一次尺寸，两头都让 Leaflet 重算，否则瓦片留白
+    var fix = function () { if (S.map) S.map.invalidateSize(); };
+    setTimeout(fix, 60);
+    setTimeout(fix, 320);
+    if (want && S.map && S.me) S.map.setView([S.me.lat, S.me.lon], Math.max(S.map.getZoom(), 14));
   }
 
   /* ------------------------------------------------ 定位 / 手动选点 */
@@ -2160,6 +2177,10 @@
     if ($('btnHere')) $('btnHere').addEventListener('click', locate);
     if ($('btnManual')) $('btnManual').addEventListener('click', function () { renderManualFavs(); openModal('modalManual'); });
     if ($('btnFitMap')) $('btnFitMap').addEventListener('click', fitAll);
+    if ($('btnMapFull')) $('btnMapFull').addEventListener('click', function () { mapFull(); });
+    document.addEventListener('keydown', function (e) {
+      if ((e.key === 'Escape' || e.key === 'Esc') && $('cardMap') && $('cardMap').classList.contains('fs')) mapFull(false);
+    });
     if ($('btnSat')) $('btnSat').addEventListener('click', runSat);
     // 语言
     var langRow = $('langRow');
@@ -2239,6 +2260,7 @@
     if (AppPlugin && AppPlugin.addListener) {
       // 安卓返回键：先关弹窗 → 再回「结论」→ 最后才退出
       AppPlugin.addListener('backButton', function () {
+        if ($('cardMap') && $('cardMap').classList.contains('fs')) { mapFull(false); return; }
         var open = document.querySelectorAll('.modal:not(.hidden)');
         if (open.length) {
           Array.prototype.forEach.call(open, function (m) { m.classList.add('hidden'); });
@@ -2345,6 +2367,7 @@
 
   window.LureCast = {
     state: S, cfg: CFG, store: Store, refresh: refresh, setMe: setMe, locate: locate,
-    applyTabNames: applyTabNames, renderAll: renderAll, drawMap: drawMap, drawRoutes: drawRoutes
+    applyTabNames: applyTabNames, renderAll: renderAll, drawMap: drawMap, drawRoutes: drawRoutes,
+    mapFull: mapFull
   };
 })();

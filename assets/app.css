@@ -126,6 +126,8 @@ body.perf .strip { backdrop-filter: none; background: var(--void-2); }
 .compass .needle-to { stroke: var(--fam); stroke-width: 3; stroke-linecap: round; }
 .compass .needle-from { stroke: var(--ink-3); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 3 4; }
 .windtxt { flex: 1 1 160px; min-width: 0; font-size: var(--sub); color: var(--ink-2); line-height: 1.7; }
+ .windskel { flex: 1 1 160px; min-width: 0; }
+ .windskel:empty { display: none; }
 .windtxt b { color: var(--ink); }
 
 /* ---------------------------------------------------------- 曲线（流量/潮汐/24h） */
@@ -198,6 +200,26 @@ body.perf .strip { backdrop-filter: none; background: var(--void-2); }
 @media (min-width: 860px) { .mapbox { height: 400px; } }
 #map, #satHi, #satHiBox > div { position: absolute; inset: 0; }
 .mapbox.slim { position: relative; }
+
+ /* ---------------------------------------------------------- 地图独立全屏 */
+ .icoact { padding: 0 9px; }
+ .icoact .ic-out { display: none; }
+ body.mapfs { overflow: hidden; }
+ #cardMap.fs {
+   position: fixed; inset: 0; z-index: 140; margin: 0; padding: 0;
+   border: 0; border-radius: 0; max-height: none;
+   display: flex; flex-direction: column;
+   background: var(--void);
+ }
+ #cardMap.fs .card-head { padding: 12px 14px 9px; border-bottom: 1px solid var(--hair); }
+ #cardMap.fs .mapbox {
+   flex: 1 1 auto; height: auto; min-height: 0;
+   border: 0; border-radius: 0; border-bottom: 1px solid var(--hair);
+ }
+ #cardMap.fs .maplgd { padding: 9px 14px 0; margin: 0; }
+ #cardMap.fs .card-foot { padding: 7px 14px 12px; margin: 0; }
+ #cardMap.fs .icoact .ic-in { display: none; }
+ #cardMap.fs .icoact .ic-out { display: block; }
 .leaflet-container { background: #0a1220; font-family: var(--font); }
 .leaflet-control-attribution {
   background: rgba(6, 9, 17, .78) !important; color: var(--ink-3) !important; font-size: 11px !important;
