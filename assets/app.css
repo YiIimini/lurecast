@@ -1008,3 +1008,73 @@ select.uisource { position: absolute; width: 1px; height: 1px; opacity: 0; point
   border-radius: 10px; margin-bottom: 6px; border: 1px solid var(--hair);
 }
 .aginput .icoact { flex: 0 0 auto; height: 40px; }
+
+/* ============================================================ 统一图标（Icons.paint 填充） */
+.ic {
+  display: inline-grid; place-items: center; width: 18px; height: 18px;
+  flex: 0 0 auto; vertical-align: -3px; color: inherit;
+}
+.ic svg {
+  width: 100%; height: 100%; display: block;
+  fill: none; stroke: currentColor; stroke-width: 1.7;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.card-head .ico .ic { width: 17px; height: 17px; }
+.act .ic { width: 15px; height: 15px; vertical-align: -2px; }
+.sic .ic { width: 18px; height: 18px; }
+.aiOrb-core .ic { width: 21px; height: 21px; }
+.icoact .ic-out { display: none; }
+#cardMap.fs .icoact .ic-in { display: none; }
+#cardMap.fs .icoact .ic-out { display: block; }
+
+/* ============================================================ 移动端排版修正
+   实测（360/393/430 px）改的四件事：
+   1) 卡片标题被长备注挤成两行 → 标题单行、备注省略号；
+   2) 23 处正文只有 10.5 px（低于 11.5 可读下限）→ 抬到 11.5+；
+   3) 顶栏/地图图标按钮 34×38（低于 44 触控）→ 提到 42–44；
+   4) 悬浮球会压住最后一张卡 → 底部留出球的高度 + 安全区。 */
+.card-head h2 { white-space: nowrap; }
+.card-note {
+  min-width: 0; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.card-head .head-right { min-width: 0; }
+
+@media (max-width: 480px) {
+  .card-note { max-width: 38vw; font-size: max(11.5px, var(--tiny)); }
+  .card-foot, .hint, .spot-why { font-size: max(11.5px, var(--tiny)); }
+  .spot-why { font-size: max(12.5px, var(--sub)); line-height: 1.7; }
+  .spot-tags i { font-size: max(11.5px, var(--tiny)); padding: 3px 8px; }
+  .agtool { font-size: max(11.5px, var(--tiny)); }
+  .sic { width: 38px; height: 38px; }
+  .act { min-height: 42px; }
+  .icoact { min-width: 42px; padding: 0 10px; }
+  .chip { min-height: 38px; }
+  /* 悬浮球不挡内容 */
+  .stage { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
+  /* 弹窗在手机上做成底部抽屉，比居中浮窗更顺手 */
+  .modal { align-items: flex-end; padding: 0; }
+  .modal-box {
+    width: 100%; max-width: none; max-height: 92vh;
+    border-radius: 20px 20px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .modal-head { padding-top: 14px; }
+  .modal-box.agbox { height: min(92vh, 820px); }
+  /* 表单字号 ≥16px，避免 iOS 聚焦时自动放大 */
+  #uiInput, .aginput textarea, #updateUrl, .field input, .field select, .aisel { font-size: max(16px, var(--sub)); }
+}
+
+@media (max-width: 380px) {
+  .card-note { max-width: 34vw; }
+  .tab { font-size: calc(13.5px * var(--fs) / 14px); }
+  .brand span { display: none; }
+}
+/* 顶栏图标按钮加宽到 42，纯图标的也够点 */
+@media (max-width: 480px) {
+  .titlebar .act { min-width: 42px; justify-content: center; }
+  .titlebar .act .lbl { max-width: 5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+/* Leaflet 归属信息在窄屏上别太抢眼 */
+@media (max-width: 480px) {
+  .leaflet-control-attribution { font-size: 10px !important; }
+}

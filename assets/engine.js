@@ -493,8 +493,11 @@
       if (c.distToMe <= 900) reasons.push('离你 ' + fmtDist(c.distToMe) + '，步行/短途即可下竿');
       /* 每个点自己的实测数值，卡片上就能对上（DEM 采样 + 距离/方位），不会再像模板文案 */
       if (c.slopePct != null) {
-        reasons.push('岸坡 ' + Math.round(c.slopePct) + '%（岸上 120 m 高差），近岸 20 m 约 ' +
-          (c.depth20 != null ? c.depth20.toFixed(1) : '?') + ' m 深');
+      var slopeTxt = '岸坡 ' + Math.round(c.slopePct) + '%（岸上 120 m 高差），近岸 20 m 约 ' +
+        (c.depth20 != null ? c.depth20.toFixed(1) : '?') + ' m 深';
+      // 前面已经用文字说过"岸坡偏陡/适中"了，这里只补数值，避免同一件事说三遍
+      var saidSlope = reasons.some(function (t) { return t.indexOf('岸坡') >= 0; });
+      reasons.push(saidSlope ? slopeTxt.replace('岸坡 ', '实测 ') : slopeTxt);
       }
     var formShort = c.form === 'point' ? ((c.formStrength || '') + '岬角')
       : c.form === 'bay' ? ((c.formStrength || '') + '湾')

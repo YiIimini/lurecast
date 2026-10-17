@@ -13,8 +13,8 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="assets/theme.css?v=20261020c">
-<link rel="stylesheet" href="assets/app.css?v=20261020c">
+<link rel="stylesheet" href="assets/theme.css?v=20261020d">
+<link rel="stylesheet" href="assets/app.css?v=20261020d">
 </head>
 <body class="hoverable">
 <div class="app">
@@ -26,17 +26,17 @@
       </div>
       <div class="spacer"></div>
       <button class="act ghost" id="btnManual" aria-label="找水域" data-tip="找水域|搜索湖/河/海的名字，或直接填经纬度，把评估位置换过去。">
-        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg>
+          <i class="ic" data-icon="search"></i>
         <span class="lbl" id="btnManualLbl">找水域</span>
       </button>
       <button class="act ghost" id="btnSettings" aria-label="外观设置" data-tip="外观设置|配色 6 套、界面字号、性能优先开关，存在本机。">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v2.8M12 18.6v2.8M2.6 12h2.8M18.6 12h2.8M5.3 5.3l2 2M16.7 16.7l2 2M18.7 5.3l-2 2M7.3 16.7l-2 2"/></svg>
+          <i class="ic" data-icon="settings"></i>
       </button>
         <button class="act ghost" id="btnAgent" aria-label="AI 助手" data-tip="AI 助手|读这份应用里的定位、分数、钓点、风与水情回答你；要一个支持工具调用的模型。">
-          <svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.6L18.4 9.4 13.8 11.2 12 15.8 10.2 11.2 5.6 9.4 10.2 7.6z"/><path d="M18 15l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg>
+          <i class="ic" data-icon="ai"></i>
         </button>
       <button class="act primary" id="btnRefresh" aria-label="刷新数据" data-tip="刷新|清掉 10 分钟缓存重新拉取所有数据；出错时重试也用它。">
-        <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4h-4"/></svg>
+          <i class="ic" data-icon="refresh"></i>
         <span class="lbl" id="btnRefreshLbl">刷新</span>
       </button>
     </header>
@@ -62,7 +62,7 @@
       <!-- 定位与水域 -->
       <section class="card span2" data-tab="summary" data-fam="loc" id="cardLoc">
         <div class="card-head">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="pin"></i></span>
           <h2>当前位置与水域</h2>
           <div class="head-right">
             <button class="act ghost" id="btnShareLoc">分享</button>
@@ -83,7 +83,7 @@
       <!-- 鱼口指数 -->
       <section class="card" data-tab="summary" data-fam="score" id="cardScore">
         <div class="card-head">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M3 13c4 0 5-7 9-7s5 7 9 7"/><path d="M3 17c4 0 5-4 9-4s5 4 9 4"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="gauge"></i></span>
           <h2>鱼口指数</h2>
           <div class="head-right"><span class="card-note" id="scoreNote">环境综合</span></div>
         </div>
@@ -102,7 +102,7 @@
       <!-- 推荐钓点（核心） -->
       <section class="card span2" data-tab="spots" data-fam="spot" id="cardSpot">
         <div class="card-head">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 18c6 0 8-12 16-12"/><circle cx="6" cy="18" r="2"/><circle cx="19" cy="6" r="2"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="fish"></i></span>
           <h2>推荐钓点</h2>
           <div class="head-right"><span class="card-note" id="spotNote">按「环境 × 点位结构 × 可达性」排序</span></div>
         </div>
@@ -115,7 +115,7 @@
       <!-- 24h 鱼口曲线 -->
       <section class="card" data-tab="summary" data-fam="time" id="cardTime">
         <div class="card-head">
-          <span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="clock"></i></span>
           <h2>未来 24 小时</h2>
           <div class="head-right"><span class="card-note" id="timeNote">时窗</span></div>
         </div>
@@ -125,7 +125,7 @@
       <!-- 天气 -->
       <section class="card" data-tab="summary" data-fam="weather" id="cardWeather">
         <div class="card-head">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M7 16a4 4 0 0 1 .6-8A5.5 5.5 0 0 1 18 9.5a3.5 3.5 0 0 1-.5 6.5z"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="cloud"></i></span>
           <h2>天气实况</h2>
           <div class="head-right"><span class="card-note" id="weatherNote">--</span></div>
         </div>
@@ -136,7 +136,7 @@
       <!-- 风 -->
       <section class="card" data-tab="summary" data-fam="wind" id="cardWind">
         <div class="card-head">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M3 8h11a3 3 0 1 0-3-3"/><path d="M3 16h14a3 3 0 1 1-3 3"/><path d="M3 12h8"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="wind"></i></span>
           <h2>风况与迎风岸</h2>
           <div class="head-right"><button class="act ghost" id="btnCompassMode" data-tip="罗盘指北|开启后刻度盘跟随手机方向旋转，N 永远指向真北；没有方向传感器的设备会固定朝上。">指北</button><span class="card-note" id="windNote">--</span></div>
         </div>
@@ -186,7 +186,7 @@
       <!-- 水位 / 水流 -->
       <section class="card" data-tab="summary" data-fam="water" id="cardWater">
         <div class="card-head">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M3 8c3 0 3 2 6 2s3-2 6-2 3 2 6 2"/><path d="M3 14c3 0 3 2 6 2s3-2 6-2 3 2 6 2"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="water"></i></span>
           <h2 id="waterTitle">水位与水流</h2>
           <div class="head-right"><span class="card-note" id="waterNote">--</span></div>
         </div>
@@ -197,7 +197,7 @@
       <!-- 地形结构 -->
       <section class="card span2" data-tab="sat" data-fam="terrain" id="cardTerrain">
         <div class="card-head">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M3 19l5-9 4 6 3-4 6 7z"/><path d="M3 19h18"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="terrain"></i></span>
           <h2>地形结构</h2>
           <div class="head-right"><span class="card-note" id="terrainNote">--</span></div>
         </div>
@@ -208,7 +208,7 @@
       <!-- 历史影像 · 水下结构 -->
       <section class="card span2" data-tab="sat" data-fam="sat" id="cardSat">
         <div class="card-head">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l4 3v6l-4 3-4-3V6z"/><path d="M8 12l-4 3v3l4 3 4-3"/><path d="M16 12l4 3v3l-4 3-4-3"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="satellite"></i></span>
           <h2>历史影像 · 水下结构</h2>
           <div class="head-right"><button class="act" id="btnSat" data-tip="分析历史影像|跨 3 年抽查 6 期 Sentinel-2 影像，挑出库水位最低的一期当主影像。约 10–30 秒，只下载你周围 1–2 km 那一小块。">分析影像</button></div>
         </div>
@@ -223,7 +223,7 @@
       <!-- 我的：常用地点 -->
       <section class="card span2" data-tab="me" data-fam="loc" id="cardFav">
         <div class="card-head">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="pin"></i></span>
           <h2>常用地点</h2>
           <div class="head-right"><button class="act primary" id="btnSavePlace">保存当前位置</button></div>
         </div>
@@ -234,7 +234,7 @@
       <!-- 我的：渔获档案 -->
       <section class="card span2" data-tab="me" data-fam="spot" id="cardCatch">
         <div class="card-head">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 15c4 0 5-6 9-6s5 6 9 6"/><circle cx="9" cy="9" r="1.4"/><path d="M3 20h18"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="fish"></i></span>
           <h2>渔获档案 · 拍照解锁</h2>
           <div class="head-right"><span class="card-note" id="catchNote">本地存放</span></div>
         </div>
@@ -247,7 +247,7 @@
       <!-- 我的：水族馆 -->
       <section class="card span2" data-tab="me" data-fam="water" id="cardAqua">
         <div class="card-head">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M3 12c3 0 3-4 6-4s4 8 7 8 5-4 5-4"/><circle cx="8" cy="16" r="1.2"/><circle cx="15" cy="7" r="1"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="fishalt"></i></span>
           <h2>我的水族馆</h2>
           <div class="head-right"><span class="card-note" id="aquaCount">0 / 25 种</span></div>
         </div>
@@ -261,11 +261,11 @@
       <!-- 地图 -->
       <section class="card span2" data-tab="spots" data-fam="map" id="cardMap">
         <div class="card-head">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M9 4l6 2 6-2v14l-6 2-6-2-6 2V6z"/><path d="M9 4v14M15 6v14"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="map"></i></span>
           <h2>钓点分布</h2>
           <div class="head-right">
-            <button class="act ghost icoact" id="btnMapMe" data-tip="回到我的位置|把地图拉回你现在的坐标（GPS 或手动选的点）。" aria-label="回到我的位置"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg></button>
-            <button class="act ghost icoact" id="btnMapFull" data-tip="全屏看地图" aria-label="全屏看地图"><svg class="ic-in" viewBox="0 0 24 24"><path d="M9 4H4v5"/><path d="M15 20h5v-5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/></svg><svg class="ic-out" viewBox="0 0 24 24"><path d="M4 9h5V4"/><path d="M20 15h-5v5"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/></svg></button>
+            <button class="act ghost icoact" id="btnMapMe" data-tip="回到我的位置|把地图拉回你现在的坐标（GPS 或手动选的点）。" aria-label="回到我的位置"><i class="ic" data-icon="locate"></i></button>
+            <button class="act ghost icoact" id="btnMapFull" data-tip="全屏看地图" aria-label="全屏看地图"><i class="ic ic-in" data-icon="expand"></i><i class="ic ic-out" data-icon="shrink"></i></button>
             <button class="act ghost" id="btnFitMap">看全部</button>
           </div>
         </div>
@@ -291,7 +291,7 @@
           <!-- 评分明细 -->
           <section class="card" data-fam="meta" id="cardFactor">
             <div class="card-head">
-              <span class="ico"><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="bars"></i></span>
               <h2>环境分是怎么来的</h2>
               <div class="head-right"><span class="card-note">权重可调 · 可解释</span></div>
             </div>
@@ -303,7 +303,7 @@
           <!-- 数据来源 -->
           <section class="card" data-fam="meta" id="cardMeta">
             <div class="card-head">
-              <span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.6v.6"/></svg></span>
+          <span class="ico"><i class="ic" data-icon="info"></i></span>
               <h2>数据来源与局限</h2>
             </div>
             <div id="metaBody"></div>
@@ -536,7 +536,7 @@
     <div class="agquick" id="agQuick"></div>
     <div class="aginput">
       <button class="act ghost icoact" id="agPick" data-tip="发张照片|拍照或选图，助手能看鱼、看水下结构、看岸边环境。" aria-label="添加照片">
-        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M3.6 17l4.6-4.4 3.2 3 3-2.8 5.6 5"/></svg>
+        <i class="ic" data-icon="camera"></i>
       </button>
       <div class="agthumb" id="agThumb" style="display:none"><img id="agThumbImg" alt="附件"><button id="agThumbX" aria-label="移除照片">×</button></div>
       <textarea id="agInput" rows="1" placeholder="问点什么…（例如：今天这风该打哪一岸）"></textarea>
@@ -563,19 +563,19 @@
       </div>
       <div class="sharegrid">
         <button class="sharecell" id="btnNavAmap">
-          <span class="sic amap"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z"/><path d="M9 10.5l2.2 2.2L15 8.5"/></svg></span>
+          <span class="sic amap"><i class="ic" data-icon="nav"></i></span>
           <b id="lblNavAmap">高德导航</b><em id="lblNavAmapSub">驾车到点</em>
         </button>
         <button class="sharecell" id="btnNavBaidu">
-          <span class="sic baidu"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/></svg></span>
+          <span class="sic baidu"><i class="ic" data-icon="pin"></i></span>
           <b id="lblNavBaidu">百度导航</b><em id="lblNavBaiduSub">驾车到点</em>
         </button>
         <button class="sharecell" id="btnShareText">
-          <span class="sic send"><svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2.6-6.4z"/><path d="M11.4 13.6L20 4"/></svg></span>
+          <span class="sic send"><i class="ic" data-icon="send"></i></span>
           <b id="lblShareText">分享位置</b><em id="lblShareTextSub">微信 / QQ 等</em>
         </button>
         <button class="sharecell" id="btnCopyCoord">
-          <span class="sic copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M15 5.5A2.5 2.5 0 0 0 12.5 3H6.5A2.5 2.5 0 0 0 4 5.5v6A2.5 2.5 0 0 0 6.5 14"/></svg></span>
+          <span class="sic copy"><i class="ic" data-icon="copy"></i></span>
           <b id="lblCopyCoord">复制坐标</b><em id="lblCopyCoordSub">WGS-84 + 高德</em>
         </button>
       </div>
@@ -605,10 +605,7 @@
     <circle class="orbArc-b" cx="50" cy="50" r="46"/>
   </svg>
   <span class="aiOrb-core">
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 3l1.8 4.6L18.4 9.4 13.8 11.2 12 15.8 10.2 11.2 5.6 9.4 10.2 7.6z"/>
-      <path d="M18 15l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>
-    </svg>
+    <i class="ic" data-icon="ai"></i>
   </span>
   <span class="aiOrb-dot" id="aiOrbDot"></span>
   <span class="aiOrb-badge" id="aiOrbBadge"></span>
@@ -617,17 +614,18 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="assets/store.js?v=20261020c"></script>
-<script src="assets/api.js?v=20261020c"></script>
-<script src="assets/engine.js?v=20261020c"></script>
-<script src="assets/sat.js?v=20261020c"></script>
-<script src="assets/species.js?v=20261020c"></script>
-<script src="assets/i18n.js?v=20261020c"></script>
-<script src="assets/ai.js?v=20261020c"></script>
-<script src="assets/my.js?v=20261020c"></script>
-<script src="assets/share.js?v=20261020c"></script>
-<script src="assets/ui.js?v=20261020c"></script>
-<script src="assets/app.js?v=20261020c"></script>
-<script src="assets/agent.js?v=20261020c"></script>
+<script src="assets/store.js?v=20261020d"></script>
+<script src="assets/api.js?v=20261020d"></script>
+<script src="assets/engine.js?v=20261020d"></script>
+<script src="assets/sat.js?v=20261020d"></script>
+<script src="assets/species.js?v=20261020d"></script>
+<script src="assets/i18n.js?v=20261020d"></script>
+<script src="assets/ai.js?v=20261020d"></script>
+<script src="assets/my.js?v=20261020d"></script>
+<script src="assets/share.js?v=20261020d"></script>
+<script src="assets/ui.js?v=20261020d"></script>
+<script src="assets/icons.js?v=20261020d"></script>
+<script src="assets/app.js?v=20261020d"></script>
+<script src="assets/agent.js?v=20261020d"></script>
 </body>
 </html>
