@@ -13,8 +13,8 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="assets/theme.css?v=20261019b">
-<link rel="stylesheet" href="assets/app.css?v=20261019b">
+<link rel="stylesheet" href="assets/theme.css?v=20261019c">
+<link rel="stylesheet" href="assets/app.css?v=20261019c">
 </head>
 <body class="hoverable">
 <div class="app">
@@ -32,6 +32,9 @@
       <button class="act ghost" id="btnSettings" aria-label="外观设置" data-tip="外观设置|配色 6 套、界面字号、性能优先开关，存在本机。">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v2.8M12 18.6v2.8M2.6 12h2.8M18.6 12h2.8M5.3 5.3l2 2M16.7 16.7l2 2M18.7 5.3l-2 2M7.3 16.7l-2 2"/></svg>
       </button>
+        <button class="act ghost" id="btnAgent" aria-label="AI 助手" data-tip="AI 助手|读这份应用里的定位、分数、钓点、风与水情回答你；要一个支持工具调用的模型。">
+          <svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.6L18.4 9.4 13.8 11.2 12 15.8 10.2 11.2 5.6 9.4 10.2 7.6z"/><path d="M18 15l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg>
+        </button>
       <button class="act primary" id="btnRefresh" aria-label="刷新数据" data-tip="刷新|清掉 10 分钟缓存重新拉取所有数据；出错时重试也用它。">
         <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4h-4"/></svg>
         <span class="lbl" id="btnRefreshLbl">刷新</span>
@@ -394,7 +397,7 @@
       </details>
 
       <details class="setgrp">
-        <summary>识图（拍照认鱼，可选）</summary>
+        <summary>识图与助手（拍照认鱼 / 应用内 Agent，可选）</summary>
         <div class="field">
           <label>厂商</label>
           <select id="aiProvider" class="aisel"></select>
@@ -410,6 +413,10 @@
         <div class="field">
           <label>模型名</label>
           <input id="aiModelInput" placeholder="例如 vision 模型名" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>对话模型（助手用，留空 = 用上面的模型）</label>
+          <input id="aiChatModelInput" placeholder="例如 deepseek-chat / gpt-4o-mini" autocomplete="off">
         </div>
         <div class="chiprow">
           <button class="act ghost" id="btnAiTest">测试连接</button>
@@ -460,6 +467,33 @@
       <p class="hint">外出没网时可以先打开一次让数据进缓存；缓存窗口 10 分钟。GPS 需要 https 或 localhost，直接双击 html 文件浏览器会拒绝定位。</p>
     </div>
     <div class="modal-foot">搜索与逆地理由 OpenStreetMap Nominatim / Open-Meteo 提供，请勿高频请求。</div>
+  </div>
+</div>
+
+<!-- AI 助手（Agent） -->
+<div class="modal hidden" id="modalAgent">
+  <div class="modal-box agbox">
+    <div class="modal-head">
+      <div class="agtitle">
+        <span class="agmark">AI</span>
+        <div>
+          <h3>应用助手</h3>
+          <i id="agModelNote">读本机数据回答，不编数字</i>
+        </div>
+      </div>
+      <div class="head-right">
+        <button class="act ghost" id="agClear">清空</button>
+        <button class="act ghost" data-close="modalAgent">关闭</button>
+      </div>
+    </div>
+    <div class="aglog" id="agLog"></div>
+    <div class="agquick" id="agQuick"></div>
+    <div class="aginput">
+      <textarea id="agInput" rows="1" placeholder="问点什么…（例如：今天这风该打哪一岸）"></textarea>
+      <button class="act primary" id="agSend">发送</button>
+      <button class="act ghost" id="agStop" style="display:none">停止</button>
+    </div>
+    <div class="modal-foot" id="agFoot">回答由你自选的模型生成；数据是本机的定位/气象/OSM/Sentinel-2 计算结果，推断值不等于实测。</div>
   </div>
 </div>
 
@@ -515,15 +549,16 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="assets/store.js?v=20261019b"></script>
-<script src="assets/api.js?v=20261019b"></script>
-<script src="assets/engine.js?v=20261019b"></script>
-<script src="assets/sat.js?v=20261019b"></script>
-<script src="assets/species.js?v=20261019b"></script>
-<script src="assets/i18n.js?v=20261019b"></script>
-<script src="assets/ai.js?v=20261019b"></script>
-<script src="assets/my.js?v=20261019b"></script>
-<script src="assets/share.js?v=20261019b"></script>
-<script src="assets/app.js?v=20261019b"></script>
+<script src="assets/store.js?v=20261019c"></script>
+<script src="assets/api.js?v=20261019c"></script>
+<script src="assets/engine.js?v=20261019c"></script>
+<script src="assets/sat.js?v=20261019c"></script>
+<script src="assets/species.js?v=20261019c"></script>
+<script src="assets/i18n.js?v=20261019c"></script>
+<script src="assets/ai.js?v=20261019c"></script>
+<script src="assets/my.js?v=20261019c"></script>
+<script src="assets/share.js?v=20261019c"></script>
+<script src="assets/app.js?v=20261019c"></script>
+<script src="assets/agent.js?v=20261019c"></script>
 </body>
 </html>

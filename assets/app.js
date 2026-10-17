@@ -42,7 +42,7 @@
 
   /* 构建标记：每次发版改这里。页面上能看到它，一眼就能判断「我现在看的是不是旧版」。
      index.html 里资源 URL 上的 ?v= 要同步改，否则 Service Worker 会继续喂旧 JS/CSS。 */
- var BUILD = '2026-10-19 · r9';
+ var BUILD = '2026-10-19 · r10';
   var S = {
     me: null, place: null, tzOffset: 0,
     wx: null, sea: null, flood: null, osm: null,
@@ -715,6 +715,18 @@
         });
       });
     }
+  }
+
+  /* 供 Agent 助手调用的写操作（与 chips 点击走同一条路径） */
+  function setWaterType(kind) {
+    if (['auto', 'reservoir', 'river', 'sea'].indexOf(kind) < 0) return;
+    S.waterType = kind;
+    if (S.wx) { computeEnv(); rebuildSpots(); renderAll(); stampStatus(); } else { renderChips(); }
+  }
+  function setSpecies(id) {
+    if (!E.SPECIES[id]) return;
+    S.species = id;
+    if (S.wx) { computeEnv(); rebuildSpots(); renderAll(); stampStatus(); } else { renderChips(); }
   }
 
   function verdictOf(score) {
@@ -2174,6 +2186,8 @@
 
   function bind() {
     if ($('btnRefresh')) $('btnRefresh').addEventListener('click', function () { refresh(true); });
+    if ($('btnAgent')) $('btnAgent').addEventListener('click', function () { openModal('modalAgent'); });
+    if (window.Agent && window.Agent.bind) { try { window.Agent.bind(); } catch (e) { /* 助手初始化失败不影响主流程 */ } }
     if ($('btnHere')) $('btnHere').addEventListener('click', locate);
     // 分享 / 外部导航（高德、百度、系统分享）
     if ($('btnShareLoc')) $('btnShareLoc').addEventListener('click', openShareModal);
@@ -2374,7 +2388,8 @@
   window.LureCast = {
     state: S, cfg: CFG, store: Store, refresh: refresh, setMe: setMe, locate: locate,
     applyTabNames: applyTabNames, renderAll: renderAll, drawMap: drawMap, drawRoutes: drawRoutes,
-    mapFull: mapFull
+    mapFull: mapFull, applyTab: applyTab, openModal: openModal, toast: toast,
+    setWaterType: setWaterType, setSpecies: setSpecies, openShareModal: openShareModal
   };
 
   /* ------------------------------------------------ 分享 / 外部导航 */

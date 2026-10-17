@@ -29,7 +29,7 @@
     { id: 'custom', name: '自定义（OpenAI 兼容）', kind: 'openai', base: '', model: '', custom: true }
   ];
 
-  var cfg = { provider: '', key: '', base: '', model: '' };
+  var cfg = { provider: '', key: '', base: '', model: '', chatModel: '' };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -47,6 +47,7 @@
         cfg.key = o.key || '';
         cfg.base = o.base || '';
         cfg.model = o.model || '';
+        cfg.chatModel = o.chatModel || '';
       }
     } catch (e) { /* 默认空 */ }
   }
@@ -207,6 +208,128 @@
     });
   }
 
+  /* ---------------- 对话（Agent 助手用，支持 function calling） ----------------
+     与识图共用同一家厂商与同一把 Key；对话模型可以单独填（识图模型未必支持工具调用）。
+     消息一律用 OpenAI 格式在内部流转，Gemini 在这里做一次转换。 */
+  function chatModel() { return cfg.chatModel || effectiveModel(); }
+  function chatReady() { var p = provider(); return !!(p && cfg.key && effectiveBase() && chatModel()); }
+
+  function openaiChat(messages, opts) {
+    opts = opts || {};
+    var body = {
+      model: chatModel(),
+      messages: messages,
+      temperature: opts.temperature != null ? opts.temperature : 0.4,
+      max_tokens: opts.maxTokens || 900
+    };
+    if (opts.tools && opts.tools.length) { body.tools = opts.tools; body.tool_choice = 'auto'; }
+    return fetch(effectiveBase() + '/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.key },
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + t.slice(0, 200));
+        var j = JSON.parse(t);
+        var msg = (j.choices && j.choices[0] && j.choices[0].message) || {};
+        var text = msg.content;
+        if (Array.isArray(text)) {
+          text = text.map(function (p) { return typeof p === 'string' ? p : (p && p.text) || ''; }).join('');
+        }
+        var calls = (msg.tool_calls || []).map(function (c) {
+          var args = {};
+          try { args = JSON.parse((c.function && c.function.arguments) || '{}'); } catch (e) { args = {}; }
+          return { id: c.id || ('call_' + Math.random().toString(36).slice(2, 8)), name: c.function && c.function.name, args: args };
+        });
+        return { text: text || '', toolCalls: calls };
+      });
+    });
+  }
+
+  /* Gemini：JSON Schema 类型要大写，工具消息要换成 functionResponse */
+  function upperSchema(s) {
+    if (!s || typeof s !== 'object') return s;
+    if (Array.isArray(s)) return s.map(upperSchema);
+    var out = {};
+    Object.keys(s).forEach(function (k) {
+      var v = s[k];
+      if (k === 'type' && typeof v === 'string') out[k] = v.toUpperCase();
+      else if (v && typeof v === 'object') out[k] = upperSchema(v);
+      else out[k] = v;
+    });
+    return out;
+  }
+  function geminiBody(messages, tools) {
+    var sys = '', contents = [];
+    messages.forEach(function (m) {
+      if (m.role === 'system') { sys += (sys ? '\n\n' : '') + m.content; return; }
+      if (m.role === 'tool') {
+        var res = null;
+        try { res = JSON.parse(m.content); } catch (e) { res = { raw: String(m.content || '') }; }
+        if (res === null || typeof res !== 'object') res = { value: res };
+        contents.push({ role: 'user', parts: [{ functionResponse: { name: m.name || 'tool', response: res } }] });
+        return;
+      }
+      if (m.role === 'assistant') {
+        var parts = [];
+        if (m.content) parts.push({ text: m.content });
+        (m.tool_calls || []).forEach(function (c) {
+          var args = {};
+          try { args = JSON.parse(c.function.arguments || '{}'); } catch (e) { args = {}; }
+          parts.push({ functionCall: { name: c.function.name, args: args } });
+        });
+        if (parts.length) contents.push({ role: 'model', parts: parts });
+        return;
+      }
+      contents.push({ role: 'user', parts: [{ text: String(m.content || '') }] });
+    });
+    var body = { contents: contents, generationConfig: { temperature: 0.4, maxOutputTokens: 900 } };
+    if (sys) body.systemInstruction = { parts: [{ text: sys }] };
+    if (tools && tools.length) {
+      body.tools = [{
+        functionDeclarations: tools.map(function (t) {
+          var f = t['function'] || t;
+          return { name: f.name, description: f.description, parameters: upperSchema(f.parameters) };
+        })
+      }];
+    }
+    return body;
+  }
+  function geminiChat(messages, opts) {
+    opts = opts || {};
+    var url = effectiveBase() + '/models/' + encodeURIComponent(chatModel()) +
+      ':generateContent?key=' + encodeURIComponent(cfg.key);
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(geminiBody(messages, opts.tools))
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + t.slice(0, 200));
+        var j = JSON.parse(t);
+        var cand = (j.candidates && j.candidates[0]) || {};
+        var parts = (cand.content && cand.content.parts) || [];
+        var text = '', calls = [];
+        parts.forEach(function (p, i) {
+          if (p.text) text += p.text;
+          if (p.functionCall) {
+            calls.push({ id: 'g' + i + '_' + Date.now(), name: p.functionCall.name, args: p.functionCall.args || {} });
+          }
+        });
+        return { text: text, toolCalls: calls };
+      });
+    });
+  }
+
+  function chat(messages, opts) {
+    var p = provider();
+    if (!p) return Promise.reject(new Error('还没选服务：设置 → 识图 / 助手'));
+    if (!cfg.key) return Promise.reject(new Error('还没填 API Key：设置 → 识图 / 助手'));
+    if (!effectiveBase()) return Promise.reject(new Error('自定义服务需要填 baseURL'));
+    if (!chatModel()) return Promise.reject(new Error('还没填对话模型名'));
+    return p.kind === 'gemini' ? geminiChat(messages, opts) : openaiChat(messages, opts);
+  }
+
   /* ---------------- 设置界面 ---------------- */
   function renderSettings() {
     var sel = $('aiProvider');
@@ -225,6 +348,11 @@
       $('aiModelInput').value = cfg.model || (p && p.model) || '';
       $('aiModelInput').style.display = p ? '' : 'none';
       $('aiModelInput').placeholder = (p && p.modelHint) || '模型名，例如 gpt-4o-mini';
+    }
+    if ($('aiChatModelInput')) {
+      $('aiChatModelInput').value = cfg.chatModel || '';
+      $('aiChatModelInput').style.display = p ? '' : 'none';
+      $('aiChatModelInput').placeholder = '对话模型（留空则用上面的），例如 deepseek-chat / gpt-4o-mini';
     }
     if ($('aiNote')) {
       $('aiNote').innerHTML = p
@@ -245,13 +373,14 @@
       save();
       renderSettings();
     });
-    ['aiKeyInput', 'aiBaseInput', 'aiModelInput'].forEach(function (id) {
+    ['aiKeyInput', 'aiBaseInput', 'aiModelInput', 'aiChatModelInput'].forEach(function (id) {
       var el = $(id);
       if (!el) return;
       el.addEventListener('change', function () {
         if (id === 'aiKeyInput') cfg.key = el.value.trim();
         if (id === 'aiBaseInput') cfg.base = el.value.trim();
         if (id === 'aiModelInput') cfg.model = el.value.trim();
+        if (id === 'aiChatModelInput') cfg.chatModel = el.value.trim();
         save();
       });
     });
@@ -281,6 +410,7 @@
   window.AI = {
     bind: bind, load: load, save: save, cfg: function () { return cfg; },
     providers: PROVIDERS, provider: provider, ready: ready,
-    identify: identify, renderSettings: renderSettings, matchSpecies: matchSpecies
+    identify: identify, renderSettings: renderSettings, matchSpecies: matchSpecies,
+    chat: chat, chatReady: chatReady, chatModel: chatModel
   };
 })();

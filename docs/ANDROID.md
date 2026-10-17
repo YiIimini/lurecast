@@ -151,6 +151,16 @@ cd android
   `千岛湖 · 湖心 / 坐标 29.57000, 119.02000（WGS-84）/ 高德坐标 29.56752, 119.02510（GCJ-02）/ 链接`。
   「复制坐标」三行文本进剪贴板并弹轻提示。定位卡头部两个按钮 56+103 px，363 px 宽下不挤压。
   新增 `assets/share.js`（纯本地换算，不联网）、`#modalShare`、`.toast` 轻提示；i18n 补 12 条词条。
+- ✅ **AI 助手 / 应用内 Agent（本轮）**：顶栏星标 → `#modalAgent` 聊天面板，15 个本机工具（10 读 + 5 写）。
+  实测：未配 Key 时给「先配一个大模型 + 打开设置」引导；配好后标题显示模型名；请求打到
+  `{base}/chat/completions`，body 带 `tools`（15 条，含 `required`）、`tool_choice=auto`、`Authorization`。
+  伪模型先要求 `bite_score / spots / app_status` → 三个工具在本机执行、结果以
+  `{"环境分":85,"因子":[…]}` 回填 → 第二轮拿到 tool 消息后给结论；气泡上显示
+  `查 · bite_score / 查 · spots / 查 · app_status` 三枚 chip；对话写进 `lc:agent`（IndexedDB）。
+  写操作 `set_water_type` 实测 `state.waterType` auto → river 并触发重算。
+  Gemini 分支单独验过：URL 走 `models/<model>:generateContent`、`systemInstruction` 就位、
+  参数类型转大写 `OBJECT`、15 条 functionDeclarations、`functionCall` 能解析回工具名。
+  0 未捕获异常。测试用的假 Key 已清空，设备上仍是「未配置」状态。
 - ✅ **设置弹窗可滚动**：6 个分组全展开后内容 2109 px、可视 630 px，`scrollTop` 能滚到 299+；
   根本原因是 `.modal-body` 是 flex 列，子项默认 `flex-shrink:1` 被压扁后 `overflow:hidden` 直接裁切（既不溢出也不滚动），
   修法 `.modal-body > * { flex: 0 0 auto }` + 给内容区一条可见滚动条（WebView 默认滚动条是不可见的）。
