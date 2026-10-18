@@ -10,6 +10,13 @@ import '../assets/theme.css'
 import '../assets/app.css'
 // 图标：legacy 的 icons.js 是一张 SVG 表 + paint()，先照原样复用，P4 再搬成模块
 import '../assets/icons.js'
+import { initPrefs } from './lib/cfg'
+import { I18N } from './lib/i18n'
+
+// 与老壳同序：先读判定口径与外观（CFG/UI），再读界面语言
+initPrefs()
+I18N.load()
+I18N.apply()
 
 const app = createApp(App)
 app.use(createPinia())

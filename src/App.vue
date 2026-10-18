@@ -24,6 +24,9 @@ import CardTerrain from './components/cards/CardTerrain.vue'
 import CardSpot from './components/cards/CardSpot.vue'
 import FindWater from './components/modals/FindWater.vue'
 import ShareModal from './components/modals/ShareModal.vue'
+import SettingsModal from './components/modals/SettingsModal.vue'
+import AgentModal from './components/modals/AgentModal.vue'
+import CardSat from './components/cards/CardSat.vue'
 
 const env = useEnvStore()
 const spots = useSpotsStore()
@@ -101,6 +104,10 @@ onMounted(() => {
       <button class="act primary" :disabled="env.loading" @click="env.me && loadAt(env.me.lat, env.me.lon, true)">
         <i class="ic" data-icon="refresh"></i><span class="lbl">刷新</span>
       </button>
+      <button class="act ghost" aria-label="设置" data-tip="设置|外观 / 判定口径 / 地图 / 识图 Key / 数据与版本"
+              @click="ui.openModal('settings')"><i class="ic" data-icon="settings"></i></button>
+      <button class="act ghost" aria-label="应用助手" data-tip="应用助手|读本机数据回答问题（需要在设置里填 Key）"
+              @click="ui.openModal('agent')"><i class="ic" data-icon="ai"></i></button>
     </header>
 
     <div class="strip">
@@ -142,24 +149,13 @@ onMounted(() => {
 
       <template v-else>
         <CardTerrain />
-        <section class="card span2 show" data-fam="sat">
-          <div class="card-head">
-            <span class="ico"><i class="ic" data-icon="satellite"></i></span>
-            <h2>历史影像 · 水下结构</h2>
-            <div class="head-right"><span class="card-note">待迁</span></div>
-          </div>
-          <div class="empty">
-            <b>卫星水面这一块还在老壳里</b>
-            <p>要用 Sentinel-2 的 COG 切片（geotiff.js 310 KB + 6 期影像比对），按计划单独一轮搬，
-              搬完才切「影像」页整页。</p>
-            <p>地形卡已经在上面跑的是同一份数据（OSM 岸线 + 高程采样），结论不受影响。</p>
-          </div>
-          <div class="card-foot">卫星底图 © ESA Sentinel-2；蓝绿比水深是相对值，不等于实测深度。</div>
-        </section>
+        <CardSat />
       </template>
     </div>
   </main>
 
   <FindWater />
   <ShareModal />
+  <SettingsModal />
+  <AgentModal />
 </template>

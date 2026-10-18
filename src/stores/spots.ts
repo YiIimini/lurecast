@@ -35,7 +35,9 @@ export const useSpotsStore = defineStore('spots', {
     wideTried: false,
     probeCount: 0,
     navTarget: null as null | { lat: number; lon: number; title: string; score: number | null },
-    selSpot: null as any
+    selSpot: null as any,
+    /* 卫星影像里「蓝绿比异常」的点：pickSpots 会给 250 m 内的钓点加结构分（老壳同一口径） */
+    satAnomalies: [] as any[],
   }),
 
   getters: {
@@ -113,12 +115,18 @@ export const useSpotsStore = defineStore('spots', {
         envScore: env.env.score,
         species: env.species,
         windSpeed: cur.wind_speed_10m,
-        sat: null
+        sat: this.satAnomalies.length ? this.satAnomalies : null
       }) || []
       if (this.selSpot) {
         const found = this.spots.filter((s: any) => s.id === this.selSpot.id)[0]
         this.selSpot = found || null
       }
+    },
+
+    /* 影像分析出来后把异常点喂进来，重排一次（不重新取岸线） */
+    setSatAnomalies(pts: any[]) {
+      this.satAnomalies = Array.isArray(pts) ? pts : []
+      this.rebuild()
     },
 
     setNavTarget(o: any, silent = false) {

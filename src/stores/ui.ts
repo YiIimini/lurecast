@@ -4,7 +4,7 @@
 import { defineStore } from 'pinia'
 
 export type Tab = 'summary' | 'spots' | 'sat' | 'me'
-export type ModalName = '' | 'findWater' | 'share'
+export type ModalName = '' | 'findWater' | 'share' | 'settings' | 'agent'
 export const useUiStore = defineStore('ui', {
   state: () => ({
     tab: 'summary' as Tab,
@@ -12,8 +12,11 @@ export const useUiStore = defineStore('ui', {
     /* 在地图上取点：true 时点地图只回坐标，不改当前位置 */
     pickMode: false,
     /* 取到点后回调（弹窗那边挂的） */
-    pickCb: null as null | ((lat: number, lon: number) => void)
+    pickCb: null as null | ((lat: number, lon: number) => void),
+    /* 地图实例回挂（MapView 暴露 applyBasemap）：设置里换底图时直接换瓦片层 */
+    mapApi: null as any
   }),
+
   actions: {
     openModal(name: ModalName) { this.modal = name },
     closeModal() {

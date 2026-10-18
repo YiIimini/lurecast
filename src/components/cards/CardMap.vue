@@ -1,13 +1,15 @@
 /* LureCast · 「钓点分布」地图卡（P2）—— 对应老壳 #cardMap
    卡片本体只负责头部按钮、图例、脚注；制图逻辑在 MapView.vue。 */
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import MapView from '../MapView.vue'
 import { useEnvStore } from '../../stores/env'
 import { useSpotsStore } from '../../stores/spots'
 import { MAPCFG, basemapById } from '../../lib/basemap'
+import { useUiStore } from '../../stores/ui'
 
 const env = useEnvStore()
+const ui = useUiStore()
 
 const props = withDefaults(defineProps<{ pickMode?: boolean }>(), { pickMode: false })
 const emit = defineEmits<{
@@ -33,9 +35,12 @@ function setHere(lat: number, lon: number) {
   env.load(lat, lon)
   spots.load(lat, lon)
 }
+/* 把地图实例交给 ui store：设置弹窗里换底图时直接调 applyBasemap，不用重建地图 */
+onMounted(() => { ui.mapApi = mapRef.value })
 
 onBeforeUnmount(() => {
   if (fs.value) document.body.classList.remove('mapfs')
+  ui.mapApi = null
 })
 
 /* 卡片把地图的常用动作转出去：App 里点列表某个钓点要飞过去，全屏按钮要 invalidate */
