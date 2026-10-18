@@ -367,8 +367,8 @@ P0 已按此开工并完成，见 §9。
 - 贴图：`dist-web/assets/fish/*.webp` 25/25 张在生产构建里 `fetch` 到 200 且有内容（浏览器内实测，不是看目录）。
 - 摆尾：同尺寸同相位 A/B 渲染（`L=420`，旧代码 vs 新代码）—— 旧版头部被切成 6 段错位、鱼嘴裂开，新版头部完整、只有尾鳍摆动。
 - 水族馆端到端：种 4 条渔获 → 「我的」页显示 `4 / 25 种`，全屏 1280×788 画布上 4 种贴图鱼在游，鲤鱼/鲈鱼头部完整、尾鳍连续。
-- APK：`www` 1.79 MB（含 715 KB 贴图）、APK **5.59 MB**（5,865,112 B，≤7 MB 预算；包里 25 张贴图在、`legacy.html` 与 `icons/source/` 都不在）。`classes.dex` 压缩后 3.0 MB 仍是最大单项。
-- **体积账要重新算**：这一版比上一版还多了 715 KB 贴图，APK 反而小了 1.18 MB，原因三条 —— ①`icons/source/`（设计源图 578 KB）不再进包；②`sync-web.mjs` 现在会清空 Android 的 `assets/public`，此前 Capacitor 的 copy 只覆盖不删除，历次构建换了 hash 的旧资源一直叠在包里（约 1 MB 死重量）；③老壳本来就没带。所以「删老壳只省 0.13 MB」是在被污染的包上测的，不可信；真正的大头是 `classes.dex`（压缩后 3.0 MB）+ `resources.arsc`（424 KB）。
+- APK：`www` 1.79 MB（含 715 KB 贴图）、APK **6,006,528 B = 5.73 MiB**（≤7 MB 预算；包里 41 个 web 资源、25 张贴图在、`legacy.html` 与 `icons/source/` 都不在；同一份资产连打两次字节数不变）。`classes.dex` 压缩后 3.0 MB 与 `resources.arsc` 424 KB 是最大的两项。
+- **体积账要重新算**：这一版比上一版（6.77 MB）还多了 715 KB 贴图，APK 反而小了约 1 MB，原因三条 —— ①`icons/source/`（设计源图 578 KB）不再进包；②`sync-web.mjs` 现在会清空 Android 的 `assets/public`，此前 Capacitor 的 copy 只覆盖不删除，历次构建换了 hash 的旧资源一直叠在包里（约 1 MB 死重量）；③老壳本来就没带。所以「删老壳只省 0.13 MB」是在被污染的包上测的，不可信；真正的大头是 Android 侧的 `classes.dex`。
 
 **留作已知限制**
 

@@ -43,11 +43,13 @@ function boot() {
   if (icons && icons.paint) icons.paint()
 
   /* Service Worker：只在打包产物里注册（dev 下会缓存 Vite 的模块图，反而碍事）。
-     新 SW 的清单是 install 时从 index.html 里扒的，加资源不用再手改。 */
+     新 SW 的清单是 install 时从 index.html 里扒的，加资源不用再手改。
+     注意 boot 可能晚于 load（等 IndexedDB 那次异步），那时再 addEventListener('load') 就永远等不到，
+     所以页已加载完就立即注册。 */
   if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(() => { /* 拿不到离线能力也不影响使用 */ })
-    })
+    const reg = () => navigator.serviceWorker.register('./sw.js').catch(() => { /* 拿不到离线能力也不影响使用 */ })
+    if (document.readyState === 'complete') reg()
+    else window.addEventListener('load', reg)
   }
 }
 
