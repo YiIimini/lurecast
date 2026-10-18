@@ -4,8 +4,7 @@
 import { defineStore } from 'pinia'
 
 export type Tab = 'summary' | 'spots' | 'sat' | 'me'
-export type ModalName = '' | 'findWater'
-
+export type ModalName = '' | 'findWater' | 'share'
 export const useUiStore = defineStore('ui', {
   state: () => ({
     tab: 'summary' as Tab,

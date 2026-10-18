@@ -64,6 +64,7 @@ function locate() {
       <span class="ico"><i class="ic" data-icon="pin"></i></span>
       <h2>当前位置与水域</h2>
       <div class="head-right">
+        <button class="act ghost" @click="ui.openModal('share')">分享</button>
         <button class="act ghost" @click="ui.openModal('findWater')">找水域</button>
         <button class="act ghost" @click="locate">用 GPS 定位</button>
       </div>

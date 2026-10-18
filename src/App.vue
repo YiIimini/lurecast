@@ -20,8 +20,10 @@ import CardMap from './components/cards/CardMap.vue'
 import CardFav from './components/cards/CardFav.vue'
 import CardCatch from './components/cards/CardCatch.vue'
 import CardAqua from './components/cards/CardAqua.vue'
+import CardTerrain from './components/cards/CardTerrain.vue'
 import CardSpot from './components/cards/CardSpot.vue'
 import FindWater from './components/modals/FindWater.vue'
+import ShareModal from './components/modals/ShareModal.vue'
 
 const env = useEnvStore()
 const spots = useSpotsStore()
@@ -138,19 +140,26 @@ onMounted(() => {
         <CardAqua />
       </template>
 
-      <section v-else class="card span2 show">
-        <div class="card-head">
-          <span class="ico"><i class="ic" data-icon="info"></i></span>
-          <h2>影像</h2>
-        </div>
-        <div class="empty">
-          <b>这一页还在老壳里</b>
-          <p>卫星水面（Sentinel-2）要走 geotiff.js + Copernicus DEM，和地形卡一起在 P4 搬。</p>
-          <p>按 strangler 计划，新壳与老壳（<code>index.html</code>）并存，P4 才整站切换。</p>
-        </div>
-      </section>
+      <template v-else>
+        <CardTerrain />
+        <section class="card span2 show" data-fam="sat">
+          <div class="card-head">
+            <span class="ico"><i class="ic" data-icon="satellite"></i></span>
+            <h2>历史影像 · 水下结构</h2>
+            <div class="head-right"><span class="card-note">待迁</span></div>
+          </div>
+          <div class="empty">
+            <b>卫星水面这一块还在老壳里</b>
+            <p>要用 Sentinel-2 的 COG 切片（geotiff.js 310 KB + 6 期影像比对），按计划单独一轮搬，
+              搬完才切「影像」页整页。</p>
+            <p>地形卡已经在上面跑的是同一份数据（OSM 岸线 + 高程采样），结论不受影响。</p>
+          </div>
+          <div class="card-foot">卫星底图 © ESA Sentinel-2；蓝绿比水深是相对值，不等于实测深度。</div>
+        </section>
+      </template>
     </div>
   </main>
 
   <FindWater />
+  <ShareModal />
 </template>
