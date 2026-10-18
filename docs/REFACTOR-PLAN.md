@@ -144,13 +144,34 @@ src/
 
 ---
 
-## 8. 需要你拍板的一件事
+## 8. 选型与节奏（已定）
 
-**选哪条路线**（A Vue 3 / B Svelte 5 / C React 18）。
-我的推荐是 **A**：迁移成本最低（52 张卡片可平移）、生态最成熟、体积可控、中文资料最全。
+**已定：路线 A（Vue 3 + Vite + TypeScript + Pinia），strangler 节奏 —— 每阶段都能出 APK。**
+理由：52 张卡片可平移、生态最成熟、体积可控、中文资料最全。
 
-拍板后我按 §5 的 P0 直接开工：**先把 Vite/TS/单测地基和 Leaflet 自托管做掉**，
-跑通「老页面在新构建下照常工作 + engine 有单测」，再开始换壳。
+P0 已按此开工并完成，见 §9。
+
+---
+
+## 9. P0 完成情况（2026-10-18）
+
+| 交付 | 内容 | 验收 |
+|---|---|---|
+| 工具链 | `package.json` / `vite.config.ts` / `tsconfig.json`，Vue 3 + Vite 6 + TS 5.7 + Vitest 3 + vue-tsc | `npm run build` ✅ `npm test` ✅ `npm run typecheck` ✅ |
+| 引擎迁移 | `src/lib/engine.ts`（828 行，从 `assets/engine.js` 机械迁移，P0 阶段暂 `@ts-nocheck`） | 导出面逐项对齐 |
+| **安全网** | `src/lib/__tests__/engine.parity.test.ts`：**12 条等价性测试**，新旧实现逐字节比对 | 全绿 |
+| 构建产物 | `dist-web/engine.js` **27.9 kB（gzip 10.3 kB）**，源码 40 kB | 运行时 import 可用，envScore=97/6 因子、dist 计算一致 |
+| 离线修复 | Leaflet 1.9.4 全套（js+css+5 图，165 kB）落到 `assets/vendor/leaflet/`，sw 预缓存补齐、`CACHE → v26` | 实测 0 次 unpkg 请求、地图 12 张瓦片正常 |
+| 线上不变 | 根 `index.html` + `assets/*.js` 照旧；`native/www` 未被接管 | 浏览器实测地图/水族馆/卡片照常 |
+
+等价性测试覆盖：`SPECIES` 表、几何（`dist/bearing/dest/angDiff/compass`）、工具（`round/clamp/hourOf/wallMs/fmtDist`）、
+`envScore`（200 组随机环境，总分+因子分+文案）、`hourCurve`+`bestWindows`（合成 36 小时）、
+`structureScore`（150 组随机点位）、`terrainSummary`、`applyTerrain`、`markWind`、`pickSpots`、
+以及 8 个单项评分函数各 100 组。
+
+**P1 第一件事**（下一轮）：`src/main.ts` + `App.vue` 壳 + `stores/env.ts`，把「结论」页 6 张卡先换成组件，
+并做「新壳 vs 老壳」同屏截图比对；`native/www` 的构建接管留到最后一步再切。
+
 
 ---
 

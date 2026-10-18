@@ -353,6 +353,20 @@ python -m http.server 8123          # 手机同网络访问 http://<你的电脑
 
 或直接部署到任意静态托管（GitHub Pages / Cloudflare Pages / Vercel），**必须是 https**，否则手机浏览器不给 GPS。
 
+**开发（重构期，2026-10 起）**
+
+```powershell
+cd D:\Ai\Datas\lurecast
+npm install
+npm test          # 等价性测试：新 src/lib/engine.ts 必须与 assets/engine.js 输出完全一致
+npm run build     # 产物在 dist-web/（P0 阶段只编译 engine，P1 起整包构建）
+npm run typecheck # vue-tsc --noEmit
+```
+
+> 现在线上与 APK 仍跑根目录的 `index.html` + `assets/*.js`（手写 IIFE）。
+> `src/` 是重构目标栈（Vue 3 + TS）的生长点，两条线并行、每阶段都能出包，方案见 `docs/REFACTOR-PLAN.md`。
+
+
 - `index.html`：正常打开会让你授权定位
 - `index.html?lat=29.6045&lon=119.041`：直接评估某个坐标（调试/分享钓点用）
 - `index.html?demo=1`：演示位置（千岛湖湖心，29.570,119.020），没 GPS 也能看效果

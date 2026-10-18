@@ -1,0 +1,27 @@
+{
+  "name": "lurecast",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "LureCast 路亚潮汐 —— 重构目标栈：Vue 3 + Vite + TypeScript + Pinia",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "pinia": "^2.2.6",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "vitest": "^3.2.7",
+    "vue-tsc": "^2.2.0"
+  }
+}
