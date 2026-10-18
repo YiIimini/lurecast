@@ -1239,6 +1239,24 @@
   var SURF = 0.13;   // 水面带高度（占画布高）
   var BED = 0.66;    // 河床起始高度（占画布高）
 
+  /* 习性水层 → 画布纵向区间（比例）。区间刻意落在水面带以下、河床以上：
+     底层鱼贴着沙但不钻进石头里，中上层鱼不会顶到水面。 */
+  var LAYER_BAND = {
+    top: [0.18, 0.34],
+    mid: [0.33, 0.55],
+    bot: [0.55, 0.645]
+  };
+  function layerOf(sp) {
+    var raw = (sp && sp.layer) ? String(sp.layer) : 'mid';
+    var parts = raw.split('|').filter(function (x) { return LAYER_BAND[x]; });
+    if (!parts.length) parts = ['mid'];
+    return parts[Math.floor(Math.random() * parts.length)];
+  }
+  function bandY(layer, H) {
+    var b = LAYER_BAND[layer] || LAYER_BAND.mid;
+    return [b[0] * H, b[1] * H];
+  }
+
   function buildBg(W, H) {
     var dpr = aqua.dpr || Math.min(2, window.devicePixelRatio || 1);
     var c = document.createElement('canvas');
@@ -1402,7 +1420,7 @@
     var L = (16 + f.size * 15) * (0.55 + z * 0.95) * (k || 1) * (f.vary || 1);
     var H = L * img.height / img.width;
     var alpha = (0.45 + z * 0.55) * (farPass ? 0.92 : 1);
-    var bob = Math.sin(t * 0.0011 * f.speed + f.phase) * H * 0.05;
+    var bob = Math.sin(t * 0.0011 * f.speed + f.phase) * H * 0.05 * (f.bobAmp || 1);
     var tilt = Math.sin(t * 0.0009 * f.speed + f.phase) * 0.03;
 
     ctx.save();
@@ -1688,16 +1706,17 @@
     var W = g.w, H = g.h;
     aqua.t += Math.min(48, aqua.last ? (aqua.avgDt || 16) : 16);
 
-    // 鱼只在中上层活动：水面带下面、河床上面（视频里翘嘴也是贴中上层游）
-    var topY = H * (SURF + 0.06), botY = H * (BED - 0.04);
+    // 每条鱼按自己的习性水层活动：上层贴水面、中层在中间、底层贴着河床
     aqua.fishes.forEach(function (f) {
+      if (!f.layer) f.layer = layerOf(f.sp);
+      var bnd = bandY(f.layer, H);
       var speed = (0.18 + f.z * 0.55) * (0.7 + f.size * 0.4);
       f.x += f.dir * speed;
       f.y += Math.sin(aqua.t * 0.0009 * (0.6 + f.z) + f.phase) * 0.12;
-      if (f.y < topY) f.y = topY;
-      if (f.y > botY) f.y = botY;
-      if (f.dir > 0 && f.x > W + 60) { f.x = -60; f.y = topY + Math.random() * (botY - topY); }
-      if (f.dir < 0 && f.x < -60) { f.x = W + 60; f.y = topY + Math.random() * (botY - topY); }
+      if (f.y < bnd[0]) f.y = bnd[0];
+      if (f.y > bnd[1]) f.y = bnd[1];
+      if (f.dir > 0 && f.x > W + 60) { f.x = -60; f.y = bnd[0] + Math.random() * (bnd[1] - bnd[0]); }
+      if (f.dir < 0 && f.x < -60) { f.x = W + 60; f.y = bnd[0] + Math.random() * (bnd[1] - bnd[0]); }
     });
     // 悬浮微粒：慢慢往上飘，飘出水面再从底部回来
     aqua.bubbles.forEach(function (b) {
@@ -1716,15 +1735,19 @@
     var g0 = resizeAqua(canvas);
     aqua.fishes = buildFishes().map(function (f, i) {
       var z = 0.25 + Math.random() * 0.75;
+      // 多水层的鱼（比如鲈鱼 上+中）每条随机挑一层，同一缸里不会全挤在一起
+      var layer = layerOf(f.sp);
+      var bnd = bandY(layer, g0.h);
       return {
         sp: f.sp, fm: formOf(f.sp), size: f.size, phase: i * 1.7, z: z, vary: 0.92 + Math.random() * 0.16,
+        layer: layer,
         x: Math.random() * g0.w,
-        y: g0.h * (SURF + 0.08) + Math.random() * g0.h * (BED - SURF - 0.12),
+        y: bnd[0] + Math.random() * (bnd[1] - bnd[0]),
+        bobAmp: layer === 'bot' ? 0.5 : 1,
         dir: Math.random() > 0.5 ? 1 : -1,
         speed: 0.2 + Math.random() * 0.35
       };
     });
-    // 预载素材：鱼贴图 + 河床贴图（本地文件，解码完就替换掉矢量画法）
     aqua.fishes.forEach(function (f) { spriteOf(f.sp); });
     decorImg('bed-lake');
     // 微粒与细草按水箱大小加密（全屏时别空得发慌）

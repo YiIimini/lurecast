@@ -29,3 +29,7 @@ Thumbs.db
 # ---- 说明 ----
 # dist/ 里的 APK 是构建产物，用 native/android 下的 gradlew 重新生成；
 # assets/vendor/geotiff.js 是随项目发布的依赖，必须提交。
+
+# ---- Python 临时 ----
+__pycache__/
+*.pyc
