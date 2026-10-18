@@ -2,11 +2,10 @@ import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
-/* 重构期（P0–P1）说明：
-   · 线上/APK 现在仍用根目录 index.html + assets/*.js（手写 IIFE），本配置暂不接管它；
-   · P0 只把 TS 管线跑通：lib 模式把 src/lib/engine.ts 编译成 dist-web/engine.js；
-   · P1 改成整包构建（入口 src/main.ts + 新的 index.html），届时 native/www 指向 dist-web；
-   · Leaflet 已本地自托管（assets/vendor/leaflet），不再依赖 CDN。 */
+/* 重构期（P1）说明：
+   · 新壳入口是 app.html（根 index.html 仍由老的手写 IIFE 驱动，两者并存用于对照）；
+   · 构建产物到 dist-web/，等 P4 全量迁完再把 index.html 与 native/www 切过来；
+   · Leaflet 已本地自托管（assets/vendor/leaflet）。 */
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -17,10 +16,8 @@ export default defineConfig({
     emptyOutDir: true,
     target: 'es2020',
     sourcemap: false,
-    lib: {
-      entry: fileURLToPath(new URL('./src/lib/engine.ts', import.meta.url)),
-      formats: ['es'],
-      fileName: () => 'engine.js'
+    rollupOptions: {
+      input: { app: fileURLToPath(new URL('./app.html', import.meta.url)) }
     }
   },
   test: {
