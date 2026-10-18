@@ -209,7 +209,37 @@ P0 已按此开工并完成，见 §9。
 - 移动端 390px 视口还没逐项比对（工具限制改不了视口宽度，下一轮用 Playwright 做）。
 - `store.ts` / `api.ts` 仍是 `@ts-nocheck`，类型在 P2 补。
 
-**P2 第一件事**：把地图（Leaflet 自托管 + `useMap()`）与定位卡一起迁过来，然后把「钓点」页做成组件。
+**P2 第一件事**（已完成，见下一节）：把地图（Leaflet 自托管 + `useMap()`）与定位卡一起迁过来，然后把「钓点」页做成组件。
+
+---
+
+## 11. P2 完成情况（2026-10-18）
+
+| 交付 | 内容 |
+|---|---|
+| 地图 | `src/lib/leaflet.ts`（`?url` 懒加载自托管 Leaflet，不进 app chunk）+ `src/lib/basemap.ts`（BASEMAPS / MAPCFG / resolveTileUrl 机械迁移，默认 OSM 中文 + darktiles 反相压暗）+ `src/components/MapView.vue`（图层分组 me/water/cands/spots/favs、点图问「设为当前位置？」、pickMode 只回坐标） |
+| 地图卡 | `src/components/cards/CardMap.vue`：回到我的位置 / 全屏（`#cardMap.fs` + `body.mapfs`，两头各 invalidate 一次）/ 看全部、图例、底图脚注 |
+| 钓点 | `src/stores/spots.ts`：`Api.osm(1600)` → `parseBodies` → 1.6 km 空则扩 4 km → `buildCandidates` → `elevationProbes`/`applyTerrain`/`markWind` → `pickSpots`，顺序与老壳 `refresh()/afterBodies()/rebuildSpots()` 完全一致；`rebuild()` 只重排不重新取数 |
+| 钓点卡 | `src/components/cards/CardSpot.vue`：前 6 名，带 rank / 方位距离 / 结构标签 / 理由 / 建议拟饵 / 设为目标（再点一次取消） |
+| 定位卡 | `CardLoc.vue` 补全：地名三级兜底（placeHint → Nominatim → OSM 水域名 + 「 附近」）、坐标+精度、地址、水域类型（自动/手动）、最近水域+距离、候选岸线点数、位置来源；水域 chip 改回老壳的 `auto/reservoir/river/sea` 四档（P1 误用了 lake/pond） |
+| 弹窗 | `src/components/modals/FindWater.vue` + `src/stores/ui.ts`：搜索（700 ms 防抖，Nominatim 政策）、结果里水域走 bbox 落最近岸边、搜索历史 `lc:searchhist`（8 条/可清空）、直填坐标、在地图上选点（切钓点页 → 地图 pickMode → 回填坐标） |
+
+**验证（19 条单测 + 真实浏览器）**
+
+- `npm test` 19 条全绿：12 条 engine 等价性 + 7 条新加的 `src/stores/__tests__/spots.test.ts`（解析/hasSlope&windward/排序与分值域/环境分 0.5 权重/reload 不打网络/1.6→4 km 兜底/OSM 全挂不抛异常/目标钓点增删）。网络全部打桩。
+- 真实浏览器（Playwright + 系统 Chrome）跑 `app.html`：结论页 6 张卡 1144+566px 布局正常；钓点页地图 1110×398、Leaflet 加载、瓦片渲染、全屏 1280×863 且 `body.mapfs` 正确加/撤；「找水域」弹窗 display=grid / 关闭后 none；390px 视口 6 张卡全部 370px 宽、无横向溢出。
+- 外网 Overpass 三个端点在测试环境全挂（`net::ERR_FAILED`），此时钓点卡片走空态 + 「重新查询岸线」，与老壳行为一致。为验证「有数据」的渲染，用 Playwright 拦网喂固定夹具：14 个候选点 → 6 个钓点（83/83/83/83/81/81）、地图 24 个图元、点第 1 个 → 「目标钓点」+ toast 正常、无 page error。
+- 生产构建（`dist-web` + 静态服务器）复测同一批交互，Leaflet 从 `?url` 资产加载正常。
+
+体积：app JS **154.6 KB（gzip 61.1 KB）**、CSS 72.9 KB（gzip 17.9 KB）；Leaflet 单独 147.6 KB，只在打开钓点页时才下载。
+
+**P2 有意留下的长尾**
+
+- 卫星（Sentinel-2）兜底没搬：要 geotiff.js + `assets/sat.js`，和「影像」页一起在 P3。
+- 岸钓/船钓路线（OSRM + 直线）、常用地点星标、地图底图切换 UI（设置弹窗）都还没搬；图层分组已留好。
+- 风卡的「迎风岸分析」段落与风后报逐小时条仍未搬（P3 与「我的」一起）。
+- `store.ts` / `api.ts` 仍是 `@ts-nocheck`。
+- 老的 `sw.js` 会把 `/app.html` 回退成 `index.html`（它按 index 做导航回退）；本地预览新壳要用没装过 SW 的端口。P4 接管 SW 时一并重写。
 
 ---
 

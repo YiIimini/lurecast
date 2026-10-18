@@ -1,18 +1,33 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+/* LureCast 新壳（P2）
+   ------------------------------------------------------------------
+   · 「结论」页：定位卡 + 5 张环境卡（P1 完成）
+   · 「钓点」页：地图卡 + 推荐钓点（P2 新增）
+   · 「影像」「我的」还没搬，页签保留占位
+   取数顺序照老壳：先气象出结论，再拉岸线补钓点（OSM 常常 10–30 s，别让整页干等）。 */
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useEnvStore } from './stores/env'
+import { useSpotsStore } from './stores/spots'
+import { useUiStore } from './stores/ui'
 import CardLoc from './components/cards/CardLoc.vue'
 import CardScore from './components/cards/CardScore.vue'
 import CardTime from './components/cards/CardTime.vue'
 import CardWeather from './components/cards/CardWeather.vue'
 import CardWind from './components/cards/CardWind.vue'
 import CardWater from './components/cards/CardWater.vue'
+import CardMap from './components/cards/CardMap.vue'
+import CardSpot from './components/cards/CardSpot.vue'
+import FindWater from './components/modals/FindWater.vue'
 
 const env = useEnvStore()
-const tab = ref<'summary' | 'spots' | 'sat' | 'me'>('summary')
+const spots = useSpotsStore()
+const ui = useUiStore()
+
+const mapRef = ref<any>(null)
 
 const statusText = computed(() => {
   if (env.loading) return '正在取数…'
+  if (spots.loading) return '岸线分析中…'
   if (env.error) return env.error
   if (env.wx) return '数据已更新'
   return '等待定位…'
@@ -24,20 +39,45 @@ const clock = computed(() => {
   return String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0')
 })
 
+async function loadAt(lat: number, lon: number, force = false, source: 'manual' | 'url' | 'gps' = 'manual') {
+  await env.load(lat, lon, force, source)
+  // 岸线是慢源：气象已出来后单独跑，到了就地补画钓点
+  spots.load(lat, lon, force)
+}
+
 function locate() {
-  if (!navigator.geolocation) return env.load(31.2304, 121.4737)
+  if (!navigator.geolocation) return loadAt(31.2304, 121.4737)
   navigator.geolocation.getCurrentPosition(
-    (p) => env.load(p.coords.latitude, p.coords.longitude),
-    () => env.load(31.2304, 121.4737), // 拿不到定位就退到杭州西湖，方便对照
+    (p) => loadAt(p.coords.latitude, p.coords.longitude, false, 'gps'),
+    () => loadAt(31.2304, 121.4737), // 拿不到定位就退到杭州西湖，方便对照
     { enableHighAccuracy: false, timeout: 12000 }
   )
+}
+
+/* 环境分 / 目标鱼 / 风一变，钓点排名立刻重排（不重新取数） */
+watch(() => [env.env && (env.env as any).score, env.species], () => spots.rebuild())
+
+
+/* 页签/弹窗切出来的新 [data-icon] 要重画一次（Icons.paint 幂等） */
+function paintIcons() { nextTick(() => (window as any).__lcPaintIcons?.()) }
+watch(() => [ui.tab, ui.modal], paintIcons)
+/* 地图取点：弹窗那边挂了回调就回填坐标，否则当作「设为当前位置」 */
+function onMapPick(lat: number, lon: number) {
+  if (ui.pickMode) ui.finishPick(lat, lon)
+  else loadAt(lat, lon)
+}
+
+/* 列表里点某个钓点 → 地图飞过去 */
+function onFocusSpot(s: any) {
+  ui.setTab('spots')
+  if (mapRef.value) mapRef.value.ensureMap().then(() => mapRef.value.focusSpot(s))
 }
 
 onMounted(() => {
   const q = new URLSearchParams(location.search)
   const lat = Number(q.get('lat'))
   const lon = Number(q.get('lon'))
-  if (isFinite(lat) && isFinite(lon) && lat && lon) env.load(lat, lon)
+  if (isFinite(lat) && isFinite(lon) && lat && lon) loadAt(lat, lon, false, 'url')
   else locate()
 })
 </script>
@@ -50,7 +90,7 @@ onMounted(() => {
         <div><b>LureCast</b><span>路亚潮汐 · 钓点推荐</span></div>
       </div>
       <div class="spacer"></div>
-      <button class="act primary" :disabled="env.loading" @click="env.me && env.load(env.me.lat, env.me.lon, true)">
+      <button class="act primary" :disabled="env.loading" @click="env.me && loadAt(env.me.lat, env.me.lon, true)">
         <i class="ic" data-icon="refresh"></i><span class="lbl">刷新</span>
       </button>
     </header>
@@ -66,13 +106,13 @@ onMounted(() => {
 
     <nav class="tabs" role="tablist">
       <button v-for="t in [['summary','结论'],['spots','钓点'],['sat','影像'],['me','我的']]" :key="t[0]"
-              class="tab" :class="{ on: tab === t[0] }" role="tab" @click="tab = t[0] as any">{{ t[1] }}</button>
+              class="tab" :class="{ on: ui.tab === t[0] }" role="tab" @click="ui.setTab(t[0] as any)">{{ t[1] }}</button>
     </nav>
   </div>
 
   <main class="stage">
     <div class="cols">
-      <template v-if="tab === 'summary'">
+      <template v-if="ui.tab === 'summary'">
         <CardLoc />
         <CardScore />
         <CardTime />
@@ -80,16 +120,25 @@ onMounted(() => {
         <CardWind />
         <CardWater />
       </template>
+
+      <template v-else-if="ui.tab === 'spots'">
+        <CardMap ref="mapRef" :pick-mode="ui.pickMode" @pick="onMapPick" />
+        <CardSpot @focus="onFocusSpot" />
+      </template>
+
       <section v-else class="card span2 show">
         <div class="card-head">
           <span class="ico"><i class="ic" data-icon="info"></i></span>
-          <h2>{{ tab === 'spots' ? '钓点' : tab === 'sat' ? '影像' : '我的' }}</h2>
+          <h2>{{ ui.tab === 'sat' ? '影像' : '我的' }}</h2>
         </div>
         <div class="empty">
-          <b>P1 阶段只迁移了「结论」页</b>
-          <p>这一页还在老壳里（<code>index.html</code>）。按 strangler 计划，下一轮迁「我的」，再下一轮是地图与钓点。</p>
+          <b>这一页还在老壳里</b>
+          <p>{{ ui.tab === 'sat' ? '卫星水面（Sentinel-2）要走 geotiff.js，和影像页一起在 P3 搬。' : '常用地点 / 渔获 / 设置弹窗排在 P3。' }}</p>
+          <p>按 strangler 计划，新壳与老壳（<code>index.html</code>）并存，P4 才整站切换。</p>
         </div>
       </section>
     </div>
   </main>
+
+  <FindWater />
 </template>

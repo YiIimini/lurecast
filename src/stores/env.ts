@@ -177,6 +177,9 @@ export const useEnvStore = defineStore('env', {
     wx: null as any,
     sea: null as any,
     flood: null as any,
+    place: null as any,
+    placeHint: null as null | string,
+    locSource: 'manual' as 'manual' | 'url' | 'gps',
     loading: false,
     error: '',
     tzOffset: 0,
@@ -215,8 +218,11 @@ export const useEnvStore = defineStore('env', {
   },
 
   actions: {
-    async load(lat: number, lon: number, force = false) {
+    async load(lat: number, lon: number, force = false, source: 'manual' | 'url' | 'gps' = 'manual') {
       this.me = { lat, lon, acc: null }
+      this.locSource = source
+      this.place = null
+      this.placeHint = null
       this.loading = true
       this.error = ''
       try {
@@ -233,6 +239,8 @@ export const useEnvStore = defineStore('env', {
         this.bodies = (osm && osm.data && (osm.data.bodies || osm.data.water)) || []
         this.waterAuto = detectWaterType(this)
         computeEnv(this)
+        /* 逆地理只是补充信息，绝不让整页等它（实测移动网络 6 s 才回） */
+        Api.reverse(lat, lon).then((p: any) => { this.place = p || null }).catch(() => {})
       } catch (e: any) {
         this.error = (e && (e.message || String(e))) || '取数失败'
       } finally {
