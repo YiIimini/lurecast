@@ -27,6 +27,7 @@ import ShareModal from './components/modals/ShareModal.vue'
 import SettingsModal from './components/modals/SettingsModal.vue'
 import AgentModal from './components/modals/AgentModal.vue'
 import CardSat from './components/cards/CardSat.vue'
+import CardSonar from './components/cards/CardSonar.vue'
 
 const env = useEnvStore()
 const spots = useSpotsStore()
@@ -139,6 +140,7 @@ onMounted(() => {
       <template v-else-if="ui.tab === 'spots'">
         <CardMap ref="mapRef" :pick-mode="ui.pickMode" @pick="onMapPick" />
         <CardSpot @focus="onFocusSpot" />
+        <CardSonar />
       </template>
 
       <template v-else-if="ui.tab === 'me'">

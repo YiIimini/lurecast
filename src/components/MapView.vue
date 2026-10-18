@@ -11,6 +11,7 @@ import { useEnvStore } from '../stores/env'
 import { useSpotsStore } from '../stores/spots'
 import { Engine as E } from '../lib/engine'
 import { useMyStore } from '../stores/my'
+import { useSonarStore } from '../stores/sonar'
 import { osrmRoute, boatOrigin } from '../lib/routes'
 import { CFG } from '../lib/cfg'
 
@@ -24,6 +25,7 @@ const emit = defineEmits<{
 const env = useEnvStore()
 const spots = useSpotsStore()
 const my = useMyStore()
+const sonar = useSonarStore()
 
 let routeToken = 0
 
@@ -60,7 +62,8 @@ async function ensureMap() {
     spots: L.layerGroup().addTo(map),
     favs: L.layerGroup().addTo(map),
     me: L.layerGroup().addTo(map),
-    routes: L.layerGroup().addTo(map)
+    routes: L.layerGroup().addTo(map),
+    sonar: L.layerGroup().addTo(map)
   }
   /* 点地图任意位置：选点模式下只抛坐标，否则问「把这里设为当前位置？」 */
   map.on('click', (e: any) => {
@@ -138,6 +141,7 @@ function draw() {
     m.addTo(layers.spots)
   })
 
+  drawSonar()
   drawRoutes()
 }
 
@@ -185,6 +189,33 @@ function applyBasemap() {
 
 function setCursor(cross: boolean) {
   if (map) map.getContainer().style.cursor = cross ? 'crosshair' : ''
+}
+
+/* ---------------------------------------------------------------- 声呐实测点
+   Deeper 导入的实测水深：按深度在「浅红 → 深蓝」之间取色，画成小圆点。
+   与「按岸坡外推的估值」在界面上分开标注，避免把实测和推断混为一谈。 */
+function drawSonar() {
+  if (!map || !layers || !layers.sonar) return
+  layers.sonar.clearLayers()
+  const pts = sonar.points || []
+  if (!pts.length) return
+  const rg = sonar.range || { min: 0, max: 0 }
+  const span = Math.max(0.5, rg.max - rg.min)
+  const colorAt = (d: number) => {
+    const t = Math.min(1, Math.max(0, (d - rg.min) / span))   // 0 浅 → 1 深
+    const r = Math.round(255 - 195 * t)
+    const g = Math.round(120 - 40 * t)
+    const b = Math.round(90 + 165 * t)
+    return 'rgb(' + r + ',' + g + ',' + b + ')'
+  }
+  pts.forEach((p: any) => {
+    L.circleMarker([p.lat, p.lon], {
+      radius: 3, color: colorAt(p.depthM), weight: 1,
+      fillColor: colorAt(p.depthM), fillOpacity: 0.75
+    }).bindPopup('<b>' + p.depthM.toFixed(1) + ' m</b>（实测）' +
+      (p.tempC != null ? '<br>水温 ' + p.tempC + '℃' : ''))
+      .addTo(layers.sonar)
+  })
 }
 
 /* ---------------------------------------------------------------- 路线
@@ -248,6 +279,7 @@ watch(() => spots.spots, draw)
 watch(() => spots.bodies, draw)
 watch(() => spots.selSpot, () => { draw(); drawRoutes() })
 watch(() => my.favorites, () => { draw(); drawRoutes() }, { deep: true })
+watch(() => sonar.points, draw, { deep: false })
 watch(() => props.pickMode, (on) => setCursor(on))
 
 void E
