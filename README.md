@@ -2,8 +2,8 @@
 
 一个**装到安卓手机上当 App 用**的路亚钓点推荐工具：拿当前位置 → 拉实时气象与水文 → 采样岸线地形 → 给出一份**能解释为什么**的钓点榜单和拟饵建议。
 
-- 网页版（PWA）：`index.html`，手机 Chrome 打开 → 添加到主屏幕，就是一个全屏 App，离线也能打开外壳。
-- 原生壳（Capacitor + 真实 Android 工程）：`native/`，用 Android Studio 打开即可出 APK。
+- 网页版（PWA）：`app.html` 是 Vue 3 新壳的入口（开发时 `npm run dev`），打包后装成 `native/www/index.html`；根 `index.html` 仍是老壳，留作回滚。手机 Chrome 打开 → 添加到主屏幕，就是一个全屏 App，离线也能打开外壳。
+- 原生壳（Capacitor + 真实 Android 工程）：`native/`；`npm run sync-web` 会把新壳装进 `www/`。重构前的界面留在 `legacy.html`，出问题直接打开就能回滚。
 - 全部数据源**免 API Key**：Open-Meteo（气象/海况/汇流/高程）+ OpenStreetMap（水域/岸线）。
 
 ## 它到底给你什么
@@ -363,8 +363,10 @@ npm run build     # 产物在 dist-web/（P0 阶段只编译 engine，P1 起整�
 npm run typecheck # vue-tsc --noEmit
 ```
 
-> 现在线上与 APK 仍跑根目录的 `index.html` + `assets/*.js`（手写 IIFE）。
-> `src/` 是重构目标栈（Vue 3 + TS）的生长点，两条线并行、每阶段都能出包，方案见 `docs/REFACTOR-PLAN.md`。
+> **P4 已整站切换**：新壳入口是 `app.html`（`src/main.ts` + Vue 组件），打包后接管 `native/www/index.html`；
+> 出包流程 `npm run sync-web`（= build → 装进 `native/www/`，根 `index.html` 存成 `legacy.html` 作回滚）。
+> 重构前的实现仍在 `assets/*.js`（手写 IIFE），只给 `legacy.html` 回滚用，新开发不要往里加东西。
+> 分阶段记录与验收数据见 `docs/REFACTOR-PLAN.md`。
 
 
 - `index.html`：正常打开会让你授权定位

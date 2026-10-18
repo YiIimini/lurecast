@@ -301,6 +301,33 @@ P0 已按此开工并完成，见 §9。
 
 **P4 剩下的**：卫星水面（Sentinel-2 COG + geotiff.js）、设置弹窗（底图/权重/画质/Key）、Agent 助手、i18n；最后切 `native/www` + 重写 `sw.js`（现在老 SW 会把 `/app.html` 回退成 `index.html`）并重建 APK。
 
+---
+
+## 14. P4 完成 + 整站切换（2026-10-18）—— 新壳接管 index.html
+
+| 交付 | 内容 |
+|---|---|
+| 设置 | `lib/cfg.ts`（CFG/UI/PALETTES/评分偏好/路线服务；`applyCfg` 调 `Engine.setProfile`）+ `modals/SettingsModal.vue` 五组：外观与操作（配色/字号/语言/性能/背景色斑）、判定口径（评分偏好/水温来源/卫星兜底）、地图与路线（8 套底图/自定义 URL+Key/OSRM·自定义·关）、识图与助手（厂商/Key/base/模型/对话模型/测试连接）、数据与版本（存储用量/清缓存/版本信息） |
+| 卫星影像 | `lib/sat.ts`（`sat.js` 645 行机械迁移：STAC 检索 → 挑 6 期水位最低 → COG 切片读取 → 蓝绿比水深/SCL 去云/异常格）+ `lib/geotiff-loader.ts`（317 KB 的 geotiff.js 走 `?url` 懒加载，不进 app chunk）+ `cards/CardSat.vue`（分析/三种视图/期次切换/窗口重读/异常点喂给钓点分） |
+| 助手 | `lib/agent.ts`（`agent.js` 760 行：工具调用 setMe/setWaterType/setSpecies/applyTab/refresh、读本机数据、mdLite、历史）+ `lib/lc-bridge.ts`（把 Pinia store 适配成老壳 `LureCast.state` + 动作）+ `modals/AgentModal.vue` |
+| i18n | `lib/i18n.ts`：三语 dict 与 `apply()` 原样迁移（按 DOM id 回填，卡片壳体保留 id）；开关在设置 → 界面语言 |
+| 切换 | `app.html` 补成正式入口（title/manifest/图标/PWA meta）；`native/sync-web.mjs` 重写：Vite 产物 → `www/index.html`，根 `index.html`（老壳）存 `www/legacy.html` 作回滚；新 `sw.js` 清单自动生成（install 时解析 index.html 的哈希资源）；`versionCode 2 / versionName 1.1` |
+
+**验证**
+
+- `npm test` 26 条全绿、`typecheck` 干净；构建 app **308.8 KB（gzip 119.9）** + geotiff 317.5 KB + leaflet 147.6 KB（后两者按需加载）。
+- 设置弹窗（Playwright）：五个分组都能开，切「气压优先」后环境分立即按新权重重算；存储面板读到 `后端 idb · 7 个键 · 约 0.03 MB`。
+- 卫星卡：点「分析影像」→ geotiff 懒加载 → STAC 查到 **80 期**并开始「读取主影像 2025-08-13…」（COG 切片受测试网络带宽限制未在 50 s 内跑完；老壳同样 10–30 s 起）。
+- 助手：弹窗打开、6 个快捷问题、未配 Key 时提示「去设置 → 识图与助手」。
+- **APK 打包装好并自检**：`native/www` 3.62 MB → APK **6.95 MB**（≤7 MB 预算）；把 `www/` 起静态服务器后用 Playwright 打开：标题「LureCast 路亚潮汐」、四个页签、6 张卡、manifest 存在、**SW 注册成功 1 个**、`legacy.html` 返回 200、无 page error。
+
+**已知取舍**
+
+- APK 里同时带了老壳（`legacy.html` + `assets/*.js` 约 2.8 MB）作为回滚入口。删掉可把 APK 压到 ~4.5 MB，但会失去手机上的一键回滚；下一版确认稳定后再删。
+- 卫星 COG 下载的实测耗时受网络影响很大（本次测试环境 50 s 未完成），真机 4G 下与老壳一致（10–30 s）。
+- `settings → 版本与更新` 里的远程检查更新（version.json / GitHub Release）还没搬：现在只显示本机版本信息。
+- i18n 只覆盖卡片标题/页签/地图图例/分享弹窗这些「骨架」文案；新壳里 Vue 渲染的正文仍是中文（与老壳一致：老壳也只翻骨架）。
+
 ## 附：现状与目标对照表（验收时贴给用户看的）
 
 | 指标 | 现在（r29） | 重构后目标 |

@@ -1,16 +1,57 @@
-/* 把上一层的 Web 应用拷进 www/，避免维护两份源码。
-   用法：npm run sync-web   （改完 index.html/assets 后一定要跑一次） */
+/* 把 Web 应用装进 www/（P4：新壳接管 index.html，老壳留成 legacy.html 可回滚）
+   ---------------------------------------------------------------------------
+   用法：npm run build && npm run sync-web（package.json 里 sync-web 已带 build）
+   做的事情：
+     1. 清空 www/，拷 dist-web/*（Vite 产物：index 名是 app.html，资源带 hash）；
+     2. app.html → index.html（Capacitor 只认 index.html）；
+     3. 再拷老壳所需的文件，并把老 index.html → legacy.html：
+        assets/（老 IIFE 那套，与新壳的 hash 资源同名不冲突）、icons/、manifest；
+     4. 拷新的 sw.js（清单自动生成，不再手写）。
+   这样万一新壳出问题，手机上打开 /legacy.html 就是重构前的完整界面。 */
 import fs from 'node:fs';
 import path from 'node:path';
+
 const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
-const src = path.resolve(here, '..');
+const root = path.resolve(here, '..');
+const dist = path.join(root, 'dist-web');
 const dst = path.resolve(here, 'www');
-const ITEMS = ['index.html', 'assets', 'icons', 'manifest.webmanifest', 'sw.js'];
+
+if (!fs.existsSync(path.join(dist, 'app.html'))) {
+  console.error('找不到 dist-web/app.html —— 先跑 npm run build');
+  process.exit(1);
+}
+
 fs.rmSync(dst, { recursive: true, force: true });
 fs.mkdirSync(dst, { recursive: true });
-for (const item of ITEMS) {
-  const from = path.join(src, item);
+
+/* 1) 新壳：Vite 产物整体进来 */
+fs.cpSync(dist, dst, { recursive: true });
+fs.renameSync(path.join(dst, 'app.html'), path.join(dst, 'index.html'));
+
+/* 2) 老壳回滚入口 */
+const legacySrc = path.join(root, 'index.html');
+if (fs.existsSync(legacySrc)) fs.copyFileSync(legacySrc, path.join(dst, 'legacy.html'));
+
+/* 老的 IIFE 资源（与新壳 hash 资源并存，路径不冲突） */
+for (const item of ['assets', 'icons', 'manifest.webmanifest']) {
+  const from = path.join(root, item);
   if (!fs.existsSync(from)) continue;
-  fs.cpSync(from, path.join(dst, item), { recursive: true });
+  fs.cpSync(from, path.join(dst, item), { recursive: true, force: true });
 }
-console.log('已同步到 www/: ' + ITEMS.join(', '));
+
+/* 3) 新 SW（覆盖老壳那份） */
+fs.copyFileSync(path.join(root, 'sw.js'), path.join(dst, 'sw.js'));
+
+/* 4) 汇总一下体积，方便盯 7 MB 预算 */
+function sizeOf(p) {
+  const st = fs.statSync(p);
+  if (st.isFile()) return st.size;
+  return fs.readdirSync(p).reduce((n, f) => n + sizeOf(path.join(p, f)), 0);
+}
+const mb = (n) => (n / 1024 / 1024).toFixed(2) + ' MB';
+console.log('已同步到 www/');
+for (const item of ['index.html', 'legacy.html', 'assets', 'icons', 'sw.js']) {
+  const p = path.join(dst, item);
+  if (fs.existsSync(p)) console.log('  ' + item + '  ' + mb(sizeOf(p)));
+}
+console.log('  www 合计 ' + mb(sizeOf(dst)));

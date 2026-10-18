@@ -32,3 +32,11 @@ const paintIcons = () => {
 }
 ;(window as any).__lcPaintIcons = paintIcons
 if (icons && icons.paint) icons.paint()
+
+/* Service Worker：只在打包产物里注册（dev 下会缓存 Vite 的模块图，反而碍事）。
+   新 SW 的清单是 install 时从 index.html 里扒的，加资源不用再手改。 */
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => { /* 拿不到离线能力也不影响使用 */ })
+  })
+}

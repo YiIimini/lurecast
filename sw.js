@@ -1,31 +1,50 @@
-/* LureCast service worker
-   · 外壳（HTML/CSS/JS/图标）走缓存，但**升级时会换 CACHE 名字**，旧缓存在 activate 里删掉。
-   · 页面导航（index.html）用 network-first：刷新就能拿到新版本，断网再退回缓存。
-   · 静态资源用 cache-first + 后台更新：装过一次之后离线也能开。
-   · 跨域接口（Open-Meteo / OSM / Sentinel-2 等）一律不进缓存，由 api.js 自己的分级缓存负责，
-     保证「水文数据永远是最新一次成功请求」。 */
- var CACHE = 'lurecast-shell-v26';
-var SHELL = [
-  './', './index.html',
-  './assets/theme.css', './assets/app.css',
-  './assets/store.js', './assets/api.js', './assets/engine.js',
-  './assets/sat.js', './assets/species.js', './assets/i18n.js',
-  './assets/ai.js', './assets/my.js', './assets/share.js', './assets/ui.js', './assets/icons.js', './assets/app.js', './assets/agent.js',
-  './assets/vendor/geotiff.js',
-  './assets/vendor/leaflet/leaflet.js', './assets/vendor/leaflet/leaflet.css',
-  './assets/vendor/leaflet/images/marker-icon.png', './assets/vendor/leaflet/images/marker-icon-2x.png',
-  './assets/vendor/leaflet/images/marker-shadow.png',
-  './assets/vendor/leaflet/images/layers.png', './assets/vendor/leaflet/images/layers-2x.png',
-  './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'
+/* LureCast service worker（新壳，P4）
+   ---------------------------------------------------------------------------
+   与老壳的三条策略一致，但**清单不再手写**：
+     · install 时先缓存核心外壳，再解析 index.html 里打包出来的哈希资源（JS/CSS/贴图）一起预缓存；
+     · 页面导航用 network-first：刷新就能拿到新版本，断网退回缓存；
+     · 同源静态资源 cache-first + 后台更新；
+     · 跨域接口（Open-Meteo / Overpass / Sentinel-2 / 瓦片）一律不进缓存，由 api 层自己管 TTL。
+   升级：CACHE 名字带版本号，activate 时删掉旧缓存。 */
+
+var CACHE = 'lurecast-shell-v27';
+var CORE = [
+  './', './index.html', './manifest.webmanifest',
+  './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'
 ];
+
+/* 从 index.html 里扒出构建产物（带 hash 的 js/css/图片），清单自动生成 */
+function precacheFromHtml(c) {
+  return fetch('./index.html', { cache: 'no-store' })
+    .then(function (res) { return res.ok ? res.text() : ''; })
+    .then(function (html) {
+      if (!html) return [];
+      var re = /(?:href|src)="([^"]+\.(?:js|css|webp|png|svg))"/g;
+      var seen = {};
+      var m;
+      while ((m = re.exec(html))) {
+        var u = m[1];
+        if (u.indexOf('http') === 0 || u.indexOf('//') === 0) continue;
+        if (seen[u]) continue;
+        seen[u] = 1;
+      }
+      return Object.keys(seen);
+    })
+    .catch(function () { return []; })
+    .then(function (urls) {
+      return Promise.all(urls.map(function (u) {
+        return c.add(u).catch(function () { /* 单个失败不阻塞 */ });
+      }));
+    });
+}
+
 self.addEventListener('install', function (e) {
   e.waitUntil(
     caches.open(CACHE)
       .then(function (c) {
-        // 逐个 add，个别图标缺失不至于整批失败
-        return Promise.all(SHELL.map(function (u) {
-          return c.add(u).catch(function () { /* 单个失败不阻塞 */ });
-        }));
+        return Promise.all(CORE.map(function (u) {
+          return c.add(u).catch(function () { /* 个别图标缺失不至于整批失败 */ });
+        })).then(function () { return precacheFromHtml(c); });
       })
       .then(function () { return self.skipWaiting(); })
   );
@@ -45,7 +64,7 @@ self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET') return;
   var url = new URL(req.url);
-  if (url.origin !== location.origin) return;
+  if (url.origin !== location.origin) return;   // 跨域接口不进缓存
 
   // 导航请求：先网络（拿新版），失败再用缓存（离线）
   if (req.mode === 'navigate' || url.pathname === '/' || /\.html$/.test(url.pathname)) {
@@ -63,7 +82,7 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
-  // 静态资源：先缓存，同时后台更新
+  // 同源静态资源：先缓存，同时后台更新
   e.respondWith(
     caches.match(req).then(function (hit) {
       var net = fetch(req).then(function (res) {
