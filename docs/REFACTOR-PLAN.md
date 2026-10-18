@@ -1,0 +1,166 @@
+# LureCast 重构方案：从「手写原生 JS」升级到成熟开源框架
+
+> 前提：`r29`（可装 APK、可离线 PWA、无任何 API Key）。
+> 本文是**决策稿**：先把现状量化，再给三条可选路线与推荐，最后是分阶段落地方案与验收门。
+> 不含实现代码——选型定下来再动手。
+
+---
+
+## 1. 现状体检（实测数据，不是估计）
+
+| 项目 | 数值 | 说明 |
+|---|---|---|
+| JS 总量 | **412 KB / 8 389 行**，13 个文件 | 全部手写，无构建、无压缩、无 tree-shaking |
+| 最大的文件 | `app.js` 133 KB / 2 794 行 | 状态 + 地图 + 渲染 + 交互全挤在一个 IIFE 里 |
+| 次大 | `my.js` 80 KB、`engine.js` 40 KB、`sat.js` 32 KB、`ai.js` 22 KB | |
+| DOM 操作密度 | `$()`（getElementById）**361 次**、`innerHTML` **64 次**、`addEventListener` **118 次** | app.js 占 213/43/64；典型「手写渲染 + 手写绑定」 |
+| UI 规模 | `index.html` 36 KB、**52 个卡片**、**6 个弹窗** | 卡片式布局是全部交互面 |
+| CSS | 75 KB（`app.css` 62 + `theme.css` 14） | 自带设计系统与配色预设 |
+| 第三方依赖 | **Leaflet 1.9.4（从 unpkg CDN 加载）** + geotiff.js 310 KB（本地） | CDN 那两条是**离线/APK 的隐患**：sw.js 只缓存同源资源 |
+| 测试 | **0 个**（无 vitest/jest/playwright 配置） | 8 389 行靠人肉回归 |
+| 构建 | **无**（无根 `package.json`；`native/` 里只有 Capacitor 的） | 改完直接 `sw.js` 里手工列缓存清单 |
+| 版本 | 22 次提交，r29 | 单人维护、节奏很快 |
+
+**结论**：这不是"要不要框架"的问题，是"8 389 行手写 DOM 已经到维护上限"的问题——
+`app.js` 里 213 次 `$()` + 43 次 `innerHTML` 意味着任何卡片改动都要同时改 HTML、CSS、三处 JS，
+且没有类型、没有测试兜底。框架重构的核心收益是**渲染与状态可声明 + 改动面收敛**，不是"看起来更现代"。
+
+---
+
+## 2. 好消息：现有代码已经有清晰的重构缝
+
+8 个模块已经用 `window.X = {…}` 暴露了**框架无关的公共接口**，这部分几乎可以原样搬到任何框架：
+
+| 模块 | 导出 API（快照） | 重构处置 |
+|---|---|---|
+| `engine.js` | 11 个：`dist/round/parseBodies/buildCandidates/applyTerrain/envScore/hourCurve/…` | **原样保留**（纯函数，最值钱）= 首批搬成 TS + 单测 |
+| `api.js` | 12 个：`weather/marine/flood/elevation/osm/osmById/cacheReport/TTL…` | 原样 + 加类型（网络层） |
+| `sat.js` | 3 个：`analyse/waterCandidates/lonLatToUtm` | 原样（含 Canvas 计算） |
+| `store.js` | IndexedDB 同步门面（`getItem/setItem/clearCache/exportAll…`） | 换成 **Dexie / idb** 或保留门面但加类型 |
+| `species.js` / `i18n.js` / `icons.js` | 数据与工具表 | 原样（转 TS 常量） |
+| `app.js` | `LureCast`：6 个导出 + 全部卡片渲染 | **拆成组件 + store**（主要工作量） |
+| `my.js` | `My`：7 个导出（渔获/常用地点/水族馆/档案导入导出） | 拆成组件 + store |
+| `ui.js` / `ai.js` / `agent.js` / `share.js` | 弹窗、识图、Agent、分享 | 拆成组件 / 服务 |
+
+⇒ 迁移可以走 **strangler（绞杀者）**：引擎先搬、UI 逐个卡片换，**任何一天都能出可用的包**，不需要"停机大爆炸"。
+
+---
+
+## 3. 三条路线（选一条）
+
+### 路线 A（推荐）：Vue 3 + Vite + TypeScript + Pinia
+
+| 维度 | 说明 |
+|---|---|
+| 体积 | Vue 3 运行时约 34 KB gz；整包预计从 412 KB → **180–220 KB（压缩后更小）** |
+| 迁移成本 | 模板语法与现有 `innerHTML` 拼接最接近，**52 张卡片可以逐张平移**，不必重画设计 |
+| 生态成熟度 | Pinia（状态）、Vue Router（hash 模式，file:// 可用）、Vitest（单测）、VueUse（工具）、vue-tsc（类型检查） |
+| 移动端 | 无 SSR 负担，`v-if/v-for` 对长列表友好；与 Capacitor 无冲突 |
+| 学/查成本 | 中文文档与示例最全 |
+
+### 路线 B：Svelte 5 + Vite（体积最优）
+
+- 运行时几乎为零，预计 412 KB → **120–150 KB**；响应式更简洁。
+- 代价：生态比 Vue/React 小，`svelte-check` 与第三方库（地图、图表）适配要自己扛；团队复用性差一点。
+
+### 路线 C：React 18 + Vite + Zustand + TanStack Query（生态最大）
+
+- 生态与招聘最友好，`react-map-gl`、`@tanstack/query`（正好治 `api.js` 的缓存/重试）都成熟。
+- 代价：运行时最重（+45 KB gz 起），52 张卡片的 JSX 重写量最大，且容易把现有 CSS 设计系统推倒重来。
+
+> **地图**：三条路线都**先保留 Leaflet**（42 KB、已跑通、有好用的插件），只做两件事：
+> ① 从 CDN 改成本地自托管（**修掉离线隐患**，当天可做）；② 抽成 `useMap()` 组合式，将来要换 MapLibre/PMTiles 只改一处。
+> 不在地图重构上冒风险——它不是当前痛点。
+
+---
+
+## 4. 目标目录结构（以路线 A 为例）
+
+```
+src/
+├── main.ts                 # createApp + Pinia + 全局样式
+├── App.vue                 # 顶栏 + 4 个 tab 容器（沿用现有 index.html 骨架）
+├── lib/                    # ← 从 assets/*.js 平移，加类型
+│   ├── engine.ts           #   纯数学/评分（原 engine.js）
+│   ├── api.ts              #   数据源 + 缓存（原 api.js）
+│   ├── sat.ts              #   Sentinel-2 分析（原 sat.js）
+│   ├── store.ts            #   IndexedDB 门面（或换 Dexie）
+│   ├── species.ts geojson.ts icons.ts i18n.ts
+│   └── __tests__/          #   Vitest：engine 的评分/评分窗口/窗口期（首次有单测）
+├── stores/                 # ← 从 app.js 的 S 对象拆出来
+│   ├── env.ts              #   位置/气象/水文/环境分/曲线/窗口
+│   ├── spots.ts            #   候选点/推荐榜/目标点/导航
+│   ├── my.ts               #   常用地点/渔获/水族馆/档案
+│   └── settings.ts         #   配色预设/性能优先/单位
+├── components/
+│   ├── cards/              # ← 52 张卡片，一张一个 .vue（先搬 6 张核心，其余按需）
+│   ├── modals/             # ← 6 个弹窗
+│   └── ui/                 #   现有 ui.js 的 alert/toast 换成组件
+└── styles/                 # theme.css / app.css 拆成 tokens + layers（视觉不动）
+```
+
+构建产物仍输出到 `native/www`（Capacitor 的 `webDir` 不变），**APK 出包流程一行不改**。
+
+---
+
+## 5. 分阶段落地（每阶段都能出包）
+
+| 阶段 | 内容 | 交付物 / 验收门 | 估时 |
+|---|---|---|---|
+| **P0 打地基** | 装 Vite + TS + Vitest；`engine/api/sat/species` 搬成 TS 模块并保留 `window.*` 兼容垫片；产物输出 `native/www` | 老 `index.html` 仍能跑（垫片生效）；`npm run build` 出包；**engine 关键函数 ≥20 条单测**（评分区间、窗口期、地形推断） | 1.5–2 d |
+| **P1 壳** | `App.vue` + 4 个 tab + Pinia store（env/spots）；**「结论」页 6 张卡**改写成组件 | 新壳与老壳逐屏对照像素级一致（截图比对）；APK 可装可跑 | 2–3 d |
+| **P2 地图** | Leaflet 自托管 + `useMap()` 封装；候选点/推荐/目标点/航迹图层抽成组合式 | 断网可用（不再有 unpkg 请求）；图层开关与现在一致 | 1–1.5 d |
+| **P3 「我的」** | 常用地点 / 渔获 / 水族馆 / 声呐（按 `docs/DEEPER-SONAR.md`）迁成组件 + `my` store | 档案导入导出、水族馆场景与现在一致；**顺手接 Deeper P0** | 2–3 d |
+| **P4 长尾** | 影像卡、Agent、分享、设置、i18n；删掉 `window.*` 垫片 | 全量 e2e（Playwright：4 tab × 关键路径）+ 首页 Lighthouse ≥90 | 2–3 d |
+
+总计 **9–13 人日**（单人节奏，含验收）。每个阶段结束都能出 APK，不会出现"重构到一半不能用"。
+
+**先做的两件零风险小事**（与选型无关，随时可做）：
+1. **Leaflet 本地化**（去掉 unpkg 两条远端依赖，sw.js 预缓存）——直接修掉离线/弱网隐患。
+2. **把 `engine.js` 的评分逻辑补上单测**（现在 0 测试）——重构前后用同一批期望值比对，这是整个重构的安全网。
+
+---
+
+## 6. 纪律：重构时不许碰的东西
+
+1. **视觉体系不动**：现有 `theme.css` 的配色预设、`--a1/--ok` 语义色、卡片圆角与间距全部保留；
+   框架只换渲染方式，不换长相（换皮是另一个项目）。
+2. **零 Key、离线优先不变**：数据源仍是 Open-Meteo / OSM / Copernicus / Sentinel-2，仍只存本机。
+3. **APK 体积预算**：`dist/*.apk` 不超过 **7 MB**（当前 6.47 MB）；超了就把 geotiff 改成按需加载。
+4. **接口兼容期**：P0–P1 期间 `window.Engine/Api/Sat/My` 必须继续可用，避免老代码与新代码同时改。
+5. **一次只搬一类**：不许在迁移卡片的同一个提交里改视觉或改业务规则。
+
+---
+
+## 7. 风险与对策
+
+| 风险 | 后果 | 对策 |
+|---|---|---|
+| 重写导致行为回归（8 389 行无测试） | 评分/推荐悄悄变了 | P0 先用 Vitest 把 engine 的行为钉住；P1 起每张卡做「新老同屏截图比对」 |
+| 体积膨胀（框架 + 依赖） | APK 变大、低端机变慢 | 预算 7 MB；`vite-bundle-visualizer` 每阶段检查；地图库不动 |
+| 视觉走样 | 用户认知成本 | 设计 token 先抽出来，组件只消费 token；不许在组件里写死颜色 |
+| 重构期中断 | 半边新半边旧 | strangler：新旧共存，`window.*` 垫片兜底，每阶段可出包 |
+| 离线壳与构建产物不一致 | SW 缓存错乱 | 用 `vite-plugin-pwa`（或保留手写 sw.js + 构建时注入清单），`CACHE` 版本随构建自动 bump |
+
+---
+
+## 8. 需要你拍板的一件事
+
+**选哪条路线**（A Vue 3 / B Svelte 5 / C React 18）。
+我的推荐是 **A**：迁移成本最低（52 张卡片可平移）、生态最成熟、体积可控、中文资料最全。
+
+拍板后我按 §5 的 P0 直接开工：**先把 Vite/TS/单测地基和 Leaflet 自托管做掉**，
+跑通「老页面在新构建下照常工作 + engine 有单测」，再开始换壳。
+
+---
+
+## 附：现状与目标对照表（验收时贴给用户看的）
+
+| 指标 | 现在（r29） | 重构后目标 |
+|---|---|---|
+| JS 体积 | 412 KB（未压缩、未 gzip 统计） | ≤ 220 KB（压缩前）/ ≤ 70 KB（gzip） |
+| 模块边界 | 13 个 IIFE + `window.*` 全局 | 8 个 `lib/` TS 模块 + 4 个 store + 组件树 |
+| 测试 | 0 | engine/api 单测 ≥40 条，Playwright 关键路径 ≥12 条 |
+| 离线 | 依赖 unpkg CDN 的 Leaflet | 全部自托管 + SW 预缓存，飞行模式冷启动可用 |
+| 出包 | 手工改 sw.js 清单 | `npm run build` 一条命令，SW 清单自动生成 |
+| 新增一张卡片 | 改 HTML + CSS + 2–3 处 JS（约 4 个文件） | 新增一个 `.vue` + 一个 store 字段 |
