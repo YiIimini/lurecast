@@ -5,6 +5,8 @@
 import { defineStore } from 'pinia'
 import { Api } from '../lib/api'
 import { Engine as E } from '../lib/engine'
+import { judgeWindow } from '../lib/window-hint'
+import { CFG } from '../lib/cfg'
 
 export type WaterType =
   | 'auto' | 'sea' | 'river' | 'stream' | 'canal'
@@ -164,6 +166,15 @@ export function computeEnv(s: any) {
   s.windows = E.bestWindows(s.curve)
   s.dPi = dP
   s.precipProb = pp
+
+  /* 秋季窗口期判据：永远算一份提示（不改分）；只有用户开了「并入评分」才按 3/3→+6、2/3→+3 加分 */
+  s.windowHint = judgeWindow(ctx, nowMs)
+  if (CFG.windowScore && s.windowHint && s.windowHint.bonus > 0 && s.env) {
+    s.env = Object.assign({}, s.env, {
+      score: Math.max(0, Math.min(100, s.env.score + s.windowHint.bonus)),
+      windowBonus: s.windowHint.bonus
+    })
+  }
 }
 
 export const useEnvStore = defineStore('env', {
@@ -194,7 +205,9 @@ export const useEnvStore = defineStore('env', {
     curve: [] as any[],
     windows: [] as any[],
     dPi: null as number | null,
-    precipProb: null as number | null
+    precipProb: null as number | null,
+    /* 秋季窗口期判据（提示，默认不参与评分） */
+    windowHint: null as any
   }),
 
   getters: {

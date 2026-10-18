@@ -90,6 +90,12 @@ function setWaterManual(v: any) {
   recomputeEnv()
 }
 
+function toggleWindowScore() {
+  CFG.windowScore = !CFG.windowScore
+  saveCfg()
+  recomputeEnv()
+}
+
 function toggleSatFallback() {
   CFG.satFallback = !CFG.satFallback
   saveCfg()
@@ -297,6 +303,15 @@ watch(visible, (on) => {
               </button>
             </div>
             <p class="hint">关掉后不再请求 Sentinel-2；OSM 没收录水域时就没有岸线点可用。</p>
+          </div>
+          <div class="field">
+            <label>秋季窗口期判据 <span class="hint-inline">README 里那三条：降温窗口 / 隔夜温差 5–8℃ / 气压 1010–1020</span></label>
+            <div class="chiprow">
+              <button class="chip" :class="{ on: CFG.windowScore }" @click="toggleWindowScore">
+                并入评分 <em>{{ CFG.windowScore ? '开（3/3 加 6 分、2/3 加 3 分）' : '关（只在评分卡上提示）' }}</em>
+              </button>
+            </div>
+            <p class="hint">默认关：这三条会摊薄现有六因子权重，而且「气压缓降」与视频口径相反。开着只是给总分加个有限的分，不会改六因子。</p>
           </div>
         </template>
 

@@ -11,6 +11,9 @@ const worst = computed(() => {
   if (!f || !f.length) return null
   return f.slice().sort((a: any, b: any) => a.score - b.score)[0]
 })
+/* 秋季窗口期判据（提示；用户开了「并入评分」才会出现在总分里） */
+const win = computed<any>(() => env.windowHint)
+
 const windBlip = computed(() => {
   const cur = env.wx && env.wx.data && env.wx.data.current
   if (!cur || cur.wind_direction_10m == null) return null
@@ -41,7 +44,14 @@ const firstWin = computed(() => (env.windows && env.windows.length ? env.windows
           </span>
           <span v-if="worst && worst.score < 60" class="blip bad">短板：{{ worst.label }} {{ worst.score }}</span>
           <span v-if="windBlip" class="blip">{{ windBlip }}</span>
+          <span v-if="win" class="blip" :class="win.hits >= 2 ? 'ok' : ''">
+            秋季窗口期 {{ win.hits }}/3{{ (env.env && env.env.windowBonus) ? ' · 已加分 +' + env.env.windowBonus : '' }}
+          </span>
         </div>
+        <p v-if="win" class="card-note" style="margin-top:6px;line-height:1.7">
+          {{ win.summary }}<br>
+          <span v-for="(l, i) in win.lines" :key="i">{{ l }}<br></span>
+        </p>
       </div>
     </div>
   </section>

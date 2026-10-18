@@ -28,21 +28,29 @@ fs.mkdirSync(dst, { recursive: true });
 fs.cpSync(dist, dst, { recursive: true });
 fs.renameSync(path.join(dst, 'app.html'), path.join(dst, 'index.html'));
 
-/* 2) 老壳回滚入口 */
-const legacySrc = path.join(root, 'index.html');
-if (fs.existsSync(legacySrc)) fs.copyFileSync(legacySrc, path.join(dst, 'legacy.html'));
-
-/* 老的 IIFE 资源（与新壳 hash 资源并存，路径不冲突） */
-for (const item of ['assets', 'icons', 'manifest.webmanifest']) {
+/* 2) 图标与 manifest（新图标来自 icons/，老壳没有也能跑） */
+for (const item of ['icons', 'manifest.webmanifest']) {
   const from = path.join(root, item);
   if (!fs.existsSync(from)) continue;
   fs.cpSync(from, path.join(dst, item), { recursive: true, force: true });
 }
 
-/* 3) 新 SW（覆盖老壳那份） */
+/* 3) 老壳回滚入口：默认不装（www 从 3.64 → 1.66 MB；但 APK 只从 6.90 → 6.77 MB，
+   因为体积大头在 Android 侧的 classes.dex，不是 web 资源，别指望删老壳能瘦到 4 MB）。
+   要带老壳（手机上能一键回滚）就 `node native/sync-web.mjs --with-legacy`。
+   老壳源码一直在仓库根目录，网页版随时能开，不装进包里也不会丢。 */
+const withLegacy = process.argv.includes('--with-legacy');
+if (withLegacy) {
+  const legacySrc = path.join(root, 'index.html');
+  if (fs.existsSync(legacySrc)) fs.copyFileSync(legacySrc, path.join(dst, 'legacy.html'));
+  const from = path.join(root, 'assets');
+  if (fs.existsSync(from)) fs.cpSync(from, path.join(dst, 'assets'), { recursive: true, force: true });
+}
+
+/* 4) 新 SW */
 fs.copyFileSync(path.join(root, 'sw.js'), path.join(dst, 'sw.js'));
 
-/* 4) 汇总一下体积，方便盯 7 MB 预算 */
+/* 5) 汇总体积，方便盯 7 MB 预算 */
 function sizeOf(p) {
   const st = fs.statSync(p);
   if (st.isFile()) return st.size;
@@ -54,4 +62,5 @@ for (const item of ['index.html', 'legacy.html', 'assets', 'icons', 'sw.js']) {
   const p = path.join(dst, item);
   if (fs.existsSync(p)) console.log('  ' + item + '  ' + mb(sizeOf(p)));
 }
+console.log('  老壳回滚包: ' + (withLegacy ? '已包含（legacy.html + assets/）' : '未包含（要的话加 --with-legacy）'));
 console.log('  www 合计 ' + mb(sizeOf(dst)));

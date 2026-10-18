@@ -14,6 +14,8 @@ export type Cfg = {
   satFallback: boolean
   route: 'osrm' | 'custom' | 'off'
   routeUrl: string
+  /* 窗口期判据是否参与评分（默认关：口径有争议，先只做提示） */
+  windowScore: boolean
 }
 
 export const CFG: Cfg = {
@@ -22,7 +24,8 @@ export const CFG: Cfg = {
   waterManual: null,
   satFallback: true,
   route: 'osrm',
-  routeUrl: ''
+  routeUrl: '',
+  windowScore: false
 }
 
 export type UiPrefs = { palette: string; fs: number; perf: boolean; aurora: boolean }
