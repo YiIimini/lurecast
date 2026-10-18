@@ -809,7 +809,7 @@
        5) 鳍：半透明膜 + 鳍条放射线 + 边缘描亮
        6) 眼：巩膜环 + 虹膜 + 瞳孔 + 高光点
        7) 环境：水中光斑扫过鱼身；远处的鱼用水色雾化 */
-  var WATER_C = '#0d3446';
+  var WATER_C = '#0e5a74';
 
   function toRGB(c) {
     c = String(c || '#8fa3b6');
@@ -1230,9 +1230,15 @@
     ctx.restore();
   }
 
-  /* ---------------------------------------------------------------- 写实水景
-     静态部分（水色、柔和光柱、远景水草剪影、沙床）预渲染到离屏画布，尺寸不变就不重画；
-     每帧只画会动的东西：水面波光、沙上焦散、水草摆动、气泡、鱼。 */
+  /* ---------------------------------------------------------------- 水底背景
+     参考实拍水下镜头（10 月翘嘴窗口期那条短片里的水下画面）：
+       上段 = 从水下看到的水面（亮斑、同心涟漪、起伏高光）
+       中段 = 青碧色水体 + 从水面斜射下来的光柱
+       下段 = 砂与卵石河床（照片贴图）+ 稀疏细草 + 砂上的焦散光带
+     静态部分只在尺寸变化时烘一张离屏背景；每帧只叠轻量动效 + 鱼。 */
+  var SURF = 0.13;   // 水面带高度（占画布高）
+  var BED = 0.66;    // 河床起始高度（占画布高）
+
   function buildBg(W, H) {
     var dpr = aqua.dpr || Math.min(2, window.devicePixelRatio || 1);
     var c = document.createElement('canvas');
@@ -1241,71 +1247,129 @@
     var x = c.getContext('2d');
     x.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+    var surfY = H * SURF, bedY = H * BED;
+
+    // 水体：水面最亮，往下逐渐加深到青碧
     var grad = x.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#16506a');
-    grad.addColorStop(0.22, '#0f3d54');
-    grad.addColorStop(0.55, '#0a2a3b');
-    grad.addColorStop(0.85, '#05161f');
-    grad.addColorStop(1, '#030d14');
+    grad.addColorStop(0, '#b6e9f2');
+    grad.addColorStop(0.10, '#63c2d8');
+    grad.addColorStop(0.26, '#2596b2');
+    grad.addColorStop(0.46, '#177a95');
+    grad.addColorStop(0.66, '#10637e');
+    grad.addColorStop(0.86, '#0d5570');
+    grad.addColorStop(1, '#0a4a60');
     x.fillStyle = grad;
     x.fillRect(0, 0, W, H);
 
-    // 柔和光柱：横向渐变做边缘虚化，比硬多边形更像海水里的光
+    // 水面亮带（静态底；起伏与涟漪在 drawScene 里逐帧叠）
+    var sg = x.createLinearGradient(0, 0, 0, surfY * 2.2);
+    sg.addColorStop(0, 'rgba(228,251,255,.80)');
+    sg.addColorStop(0.45, 'rgba(168,232,245,.32)');
+    sg.addColorStop(1, 'rgba(140,215,236,0)');
+    x.fillStyle = sg;
+    x.fillRect(0, 0, W, surfY * 2.2);
+
+    // 河床：实拍贴图（砂 + 卵石 + 稀疏细草）。按高度定比例、横向镜像平铺，
+    // 这样 4:1 的宽卡片和竖屏全屏都不会把贴图拉成糊条。
+    var bed = decorImg('bed-lake');
+    if (bed) {
+      // 先定「屏幕上卵石大概多大」，反推贴图该放大多少：
+      // 竖屏全屏不能只有一颗石头，4:1 宽卡片也不能糊成砂纸。
+      var pebPx = 12 * Math.max(0.85, Math.min(1.45, H / 420));
+      var bedH = H - bedY;
+      var scale = pebPx / 34;                       // 贴图里一颗卵石约 34px
+      var srcH = Math.min(bed.height * 0.92, bedH / scale);
+      scale = bedH / srcH;
+      var srcY = bed.height - srcH;                 // 取贴图下部（近景砂石）
+      var tileW = bed.width * scale;
+      var drawn = 0, idx = 0;
+      x.save();
+      x.beginPath();
+      x.rect(0, bedY - 2, W, bedH + 2);
+      x.clip();
+      while (drawn < W) {
+        // 横向镜像交替 + 极小的上下错位，避免看出平铺的重复
+        var jitter = (idx % 2 ? 1 : -1) * bedH * 0.012;
+        x.save();
+        if (idx % 2) { x.translate(drawn + tileW, 0); x.scale(-1, 1); }
+        else { x.translate(drawn, 0); }
+        x.drawImage(bed, 0, srcY, bed.width, srcH, 0, bedY + jitter, tileW, bedH + Math.abs(jitter) * 2);
+        x.restore();
+        drawn += tileW;
+        idx++;
+      }
+      // 水色浸染：只轻轻压一层，别把砂石的对比压没
+      x.globalCompositeOperation = 'multiply';
+      x.fillStyle = 'rgba(126,198,212,.38)';
+      x.fillRect(0, bedY - (H - bedY) * 0.06, W, H - bedY + (H - bedY) * 0.06);
+      x.restore();
+      // 上缘渐隐：用水体在该高度的颜色起手（不透明），再化成透明，
+      // 这样床带顶端不会留一条硬边。
+      var bg2 = x.createLinearGradient(0, bedY - (H - bedY) * 0.10, 0, bedY + (H - bedY) * 0.55);
+      bg2.addColorStop(0, 'rgba(16,99,126,1)');
+      bg2.addColorStop(0.18, 'rgba(16,99,126,.92)');
+      bg2.addColorStop(0.55, 'rgba(15,98,124,.45)');
+      bg2.addColorStop(1, 'rgba(14,96,122,0)');
+      x.fillStyle = bg2;
+      x.fillRect(0, bedY - (H - bedY) * 0.10, W, (H - bedY) * 0.65);
+      x.fillRect(0, bedY, W, (H - bedY) * 0.46);
+    } else {
+      // 贴图没解码好时退回程序化砂床，功能不依赖素材
+      var sandTop = H - H * 0.16;
+      var sgd = x.createLinearGradient(0, sandTop - 8, 0, H);
+      sgd.addColorStop(0, 'rgba(120,170,170,0)');
+      sgd.addColorStop(0.4, 'rgba(126,168,164,.85)');
+      sgd.addColorStop(1, '#7d9d97');
+      x.fillStyle = sgd;
+      x.beginPath();
+      x.moveTo(0, H);
+      for (var sx2 = 0; sx2 <= W; sx2 += 10) x.lineTo(sx2, sandTop + Math.sin(sx2 * 0.03) * H * 0.012);
+      x.lineTo(W, H);
+      x.closePath();
+      x.fill();
+    }
+
+    // 光柱（静态底）：从水面斜射到河床
     x.save();
     x.globalCompositeOperation = 'lighter';
     for (var i = 0; i < 4; i++) {
-      var bx = W * (0.14 + i * 0.24);
-      var bw = W * (0.055 + 0.02 * Math.sin(i * 2.1));
-      var lg = x.createLinearGradient(bx - bw, 0, bx + bw, 0);
-      lg.addColorStop(0, 'rgba(150,235,255,0)');
-      lg.addColorStop(0.5, 'rgba(158,238,255,.085)');
-      lg.addColorStop(1, 'rgba(150,235,255,0)');
+      var bx = W * (0.15 + i * 0.24) + Math.sin(i * 2.7) * W * 0.02;
+      var bw = W * (0.045 + 0.018 * Math.sin(i * 1.9 + 0.6));
+      var lg = x.createLinearGradient(0, surfY * 0.6, 0, H * 0.98);
+      lg.addColorStop(0, 'rgba(198,246,255,.13)');
+      lg.addColorStop(0.5, 'rgba(178,238,252,.045)');
+      lg.addColorStop(1, 'rgba(160,230,248,0)');
       x.fillStyle = lg;
       x.beginPath();
-      x.moveTo(bx - bw * 0.7, 0);
-      x.lineTo(bx + bw * 0.7, 0);
-      x.lineTo(bx + bw * 3.0 + W * 0.04, H);
-      x.lineTo(bx - bw * 1.6 + W * 0.04, H);
+      x.moveTo(bx - bw, surfY * 0.6);
+      x.lineTo(bx + bw, surfY * 0.6);
+      x.lineTo(bx + bw * 3.1 + W * 0.05, H * 0.98);
+      x.lineTo(bx - bw * 2.6 + W * 0.05, H * 0.98);
       x.closePath();
       x.fill();
     }
     x.restore();
 
-    // 远处水草剪影（低对比 = 景深）
+    // 河床上的焦散网（静态底，逐帧再叠会动的那层）
     x.save();
-    x.globalAlpha = 0.5;
-    for (var p = 0; p < 9; p++) {
-      var px = (p + 0.5) * W / 9 + Math.sin(p * 3.3) * W * 0.02;
-      var ph = H * (0.10 + (p % 3) * 0.05);
-      x.strokeStyle = 'rgba(20, 74, 62, .55)';
-      x.lineWidth = Math.max(1, W * 0.008);
-      x.beginPath();
-      x.moveTo(px, H);
-      x.quadraticCurveTo(px + W * 0.02, H - ph * 0.6, px + Math.sin(p * 1.7) * W * 0.02, H - ph);
-      x.stroke();
+    x.globalCompositeOperation = 'lighter';
+    var ck = Math.max(0.8, W / 360);
+    for (var q = 0; q < 10; q++) {
+      var qx = W * ((q * 0.173 + 0.05) % 1);
+      var qy = bedY + (H - bedY) * (0.22 + 0.7 * ((q * 0.311) % 1));
+      var qr = (7 + (q % 4) * 3.5) * ck;
+      x.globalAlpha = 0.30;
+      x.drawImage(causticSprite(), qx - qr * 1.8, qy - qr * 0.5, qr * 3.6, qr);
     }
+    x.globalAlpha = 1;
     x.restore();
-
-    // 沙床
-    var sandTop = H - H * 0.11;
-    var sg = x.createLinearGradient(0, sandTop - 8, 0, H);
-    sg.addColorStop(0, 'rgba(26, 64, 72, 0)');
-    sg.addColorStop(0.35, 'rgba(24, 58, 66, .85)');
-    sg.addColorStop(1, '#08181f');
-    x.fillStyle = sg;
-    x.beginPath();
-    x.moveTo(0, H);
-    for (var sx2 = 0; sx2 <= W; sx2 += 10) x.lineTo(sx2, sandTop + Math.sin(sx2 * 0.03) * H * 0.012);
-    x.lineTo(W, H);
-    x.closePath();
-    x.fill();
 
     // 胶片颗粒烘进背景：省掉每帧一次 'overlay' 全屏混合
     var gp = x.createPattern(grainTile(), 'repeat');
     if (gp) {
       x.save();
       x.globalCompositeOperation = 'overlay';
-      x.globalAlpha = 0.5;
+      x.globalAlpha = 0.34;
       x.fillStyle = gp;
       x.fillRect(0, 0, W, H);
       x.restore();
@@ -1431,8 +1495,9 @@
     return n;
   }
 
-  /* ---------------------------------------------------------------- 布景素材
-     同一套 ComfyUI + 抠图管线产出的真实照片：水底背景 scene、前景岩石/水草/沉木。 */
+  /* ---------------------------------------------------------------- 素材
+     河床是一张实拍贴图（ComfyUI 出的砂 + 卵石 + 稀疏细草）；前景细草是程序化画的，
+     因为只有程序化的才能随水流摆。 */
   var DECOR = {};
   function decorImg(name) {
     var d = DECOR[name];
@@ -1441,149 +1506,163 @@
       d.decoding = 'async';
       d.src = 'assets/fish/' + name + '.webp';
       DECOR[name] = d;
+      // 解码完再让场景重烘一次背景（否则首帧会烘在没有贴图的版本上）；
+      // 「性能优先」模式下没有逐帧循环，得手动补一帧。
+      if (name === 'bed-lake') {
+        d.onload = function () {
+          aqua.bg = null;
+          if (aqua.running) return;
+          var cv = $('aquaCanvas');
+          if (cv && st().tab === 'me') drawScene(resizeAqua(cv));
+        };
+      }
     }
     return (d.complete && d.naturalWidth) ? d : null;
   }
 
-  function blitDecor(ctx, img, cx, baseY, w, alpha) {
-    var h = w * img.height / img.width;
+  /* 前景细草：从河床长出来，越高摆幅越大（4 段弯折，跟视频里那种窄叶草一个意思） */
+  function drawWeeds(ctx, W, H, t, k) {
+    if (!aqua.plants || !aqua.plants.length) return;
     ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.drawImage(img, cx - w / 2, baseY - h, w, h);
-    ctx.restore();
-    return h;
-  }
-
-  /* 沉木：垫在鱼后面 */
-  function drawDecorBack(ctx, W, H, t, k) {
-    var wood = decorImg('decor-wood');
-    if (!wood) return;
-    blitDecor(ctx, wood, W * 0.30, H * 1.01, W * 0.54, 0.95);
-  }
-
-  /* 岩石 + 水草：挡在鱼前面；水草分 5 段随水流摆 */
-  function drawDecorFront(ctx, W, H, t, k) {
-    var rock = decorImg('decor-rock');
-    if (rock) blitDecor(ctx, rock, W * 0.13, H * 1.02, W * 0.44, 1);
-    var plants = decorImg('decor-plants');
-    if (!plants) return;
-    var w = W * 0.34;
-    var h = w * plants.height / plants.width;
-    var bands = 5, bh = plants.height / bands, dh = h / bands;
-    var cx = W * 0.80, baseY = H * 1.01;
-    ctx.save();
-    for (var i = 0; i < bands; i++) {
-      var u = 1 - i / bands;
-      var dx = Math.sin(t * 0.0013 + u * 2.2) * w * 0.05 * u * u;
-      ctx.drawImage(plants, 0, i * bh, plants.width, bh,
-        cx - w / 2 + dx, baseY - h + i * dh, w, dh + 0.8);
-    }
+    ctx.lineCap = 'round';
+    aqua.plants.forEach(function (pl) {
+      var h = pl.h * k;
+      var base = (pl.base != null ? pl.base : H);
+      var sway = Math.sin(t * 0.0011 + pl.phase) * h * 0.17;
+      var grad = ctx.createLinearGradient(pl.x, base, pl.x, base - h);
+      grad.addColorStop(0, 'rgba(22,70,50,.94)');
+      grad.addColorStop(0.6, 'rgba(48,120,80,.82)');
+      grad.addColorStop(1, 'rgba(104,172,116,.55)');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = pl.w * Math.min(1.7, k);
+      ctx.beginPath();
+      ctx.moveTo(pl.x, base - 1);
+      for (var s2 = 1; s2 <= 4; s2++) {
+        var u = s2 / 4;
+        ctx.lineTo(pl.x + sway * u * u, base - h * u);
+      }
+      ctx.stroke();
+    });
     ctx.restore();
   }
+
+  /* 水族馆场景：背景 → 水面 → 光柱 → 焦散 → 微粒 → 鱼 → 前景细草 → 收尾 */
   function drawScene(g) {
     var ctx = g.ctx, W = g.w, H = g.h, t = aqua.t;
     var k = Math.min(2.8, Math.max(0.95, Math.max(W, H) / 320));
     var perf = document.body.classList.contains('perf');
+    var surfY = H * SURF, bedY = H * BED;
+    // 鱼的大小跟画布高度走，不然 4:1 的宽卡片上鱼会大得离谱
+    var fk = Math.max(0.8, Math.min(2.0, H / 190));
 
-    // 背景：优先用真实水底照片（cover 铺满 + 压暗一点让鱼跳出来），没有素材才退回程序化水色
-    var sceneImg = decorImg('scene');
-    if (sceneImg) {
-      var sc = Math.max(W / sceneImg.width, H / sceneImg.height);
-      var sw = sceneImg.width * sc, sh = sceneImg.height * sc;
-      ctx.drawImage(sceneImg, (W - sw) / 2, (H - sh) / 2, sw, sh);
-      ctx.fillStyle = 'rgba(6, 30, 42, .18)';
-      ctx.fillRect(0, 0, W, H);
-    } else {
-      if (!aqua.bg || aqua.bg.w !== W || aqua.bg.h !== H) {
-        aqua.bg = { c: buildBg(W, H), w: W, h: H };
-      }
-      ctx.drawImage(aqua.bg.c, 0, 0, W, H);
+    // 背景：水色 + 河床贴图 + 光柱 + 焦散底，一次烘好反复用
+    if (!aqua.bg || aqua.bg.w !== W || aqua.bg.h !== H) {
+      aqua.bg = { c: buildBg(W, H), w: W, h: H };
     }
+    ctx.drawImage(aqua.bg.c, 0, 0, W, H);
 
-    // 水面波光
-    ctx.save();
-    ctx.globalAlpha = 0.42;
-    ctx.strokeStyle = 'rgba(205, 246, 255, .55)';
-    ctx.lineWidth = Math.max(1, k * 0.9);
-    for (var s2 = 0; s2 < 3; s2++) {
-      ctx.beginPath();
-      for (var x = 0; x <= W; x += 12) {
-        var y = 5 * k + s2 * 4.5 * k + Math.sin((x * 0.045) + t * 0.0016 + s2) * 2.2 * k;
-        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // 沙床上的焦散光斑
+    // ---- 水面：起伏高光 + 同心涟漪（视频里最抢眼的就是这层水面）
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    var n = perf ? 4 : (aqua.lite ? 5 : 12);
-    for (var c2 = 0; c2 < n; c2++) {
-      var cx = (W * ((c2 * 0.137) % 1)) + Math.sin(t * 0.0009 + c2) * 16 * k;
-      var cy = H * 0.90 + Math.cos(t * 0.0011 + c2 * 2.1) * 6 * k;
-      var rr = (10 + Math.abs(Math.sin(t * 0.0015 + c2)) * 16) * k;
-      ctx.drawImage(causticSprite(), cx - rr * 1.6, cy - rr * 0.45, rr * 3.2, rr * 0.9);
+    var rows = perf ? 2 : (aqua.lite ? 3 : 5);
+    for (var s = 0; s < rows; s++) {
+      var yy = surfY * (0.16 + s * 0.20) + Math.sin(t * 0.0011 + s) * 1.6 * k;
+      ctx.beginPath();
+      for (var x = 0; x <= W; x += 10) {
+        var y = yy + Math.sin(x * 0.035 + t * 0.0016 + s * 1.7) * 2.4 * k
+                   + Math.sin(x * 0.011 - t * 0.0009) * 1.8 * k;
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = 'rgba(216,250,255,' + (0.30 - s * 0.045).toFixed(3) + ')';
+      ctx.lineWidth = Math.max(1, (2.2 - s * 0.35) * k);
+      ctx.stroke();
+    }
+    var rings = perf ? 3 : (aqua.lite ? 5 : 9);
+    for (var r = 0; r < rings; r++) {
+      var cx = ((r * 0.37 + 0.08) % 1) * W + Math.sin(t * 0.0006 + r) * 6 * k;
+      var cy = surfY * 0.30 + ((r * 0.23) % 1) * surfY * 0.62;
+      var rr = (5 + ((t * 0.02 + r * 13) % 34)) * k * 0.55;
+      ctx.globalAlpha = 0.13;
+      ctx.strokeStyle = 'rgba(232,252,255,.75)';
+      ctx.lineWidth = Math.max(0.8, 0.9 * k);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rr * 1.9, rr * 0.5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // ---- 光柱：从水面斜射下来（丁达尔），缓慢晃动
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    var shafts = perf ? 2 : 3;
+    for (var i2 = 0; i2 < shafts; i2++) {
+      var bx = W * (0.14 + i2 * 0.24) + Math.sin(t * 0.0005 + i2 * 2.1) * W * 0.02;
+      var bw = W * (0.05 + 0.02 * Math.sin(i2 * 2.1));
+      var lg2 = ctx.createLinearGradient(0, surfY, 0, H * 0.92);
+      lg2.addColorStop(0, 'rgba(190,246,255,.10)');
+      lg2.addColorStop(0.55, 'rgba(170,235,250,.035)');
+      lg2.addColorStop(1, 'rgba(150,225,245,0)');
+      ctx.fillStyle = lg2;
+      ctx.beginPath();
+      ctx.moveTo(bx - bw * 0.9, surfY);
+      ctx.lineTo(bx + bw * 0.9, surfY);
+      ctx.lineTo(bx + bw * 2.2 + W * 0.05, H * 0.95);
+      ctx.lineTo(bx - bw * 2.0 + W * 0.05, H * 0.95);
+      ctx.closePath();
+      ctx.fill();
     }
     ctx.restore();
 
-    // 水草：有真实水底照片时就不要再画程序化水草了，否则一眼假
-    if (!decorImg('scene')) {
-      ctx.save();
-      aqua.plants.forEach(function (pl) {
-        var sway = Math.sin(t * 0.0014 + pl.phase) * 7 * k;
-        var grad = ctx.createLinearGradient(pl.x, H, pl.x, H - pl.h * k);
-        grad.addColorStop(0, '#123f2f');
-        grad.addColorStop(1, '#2c7a52');
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = pl.w * Math.min(1.6, k);
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(pl.x, H - 2);
-        ctx.quadraticCurveTo(pl.x + sway * 0.5, H - pl.h * 0.55 * k, pl.x + sway, H - pl.h * k);
-        ctx.stroke();
-      });
-      ctx.restore();
+    // ---- 河床上会动的焦散光带
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    var n = perf ? 4 : (aqua.lite ? 6 : 14);
+    for (var c2 = 0; c2 < n; c2++) {
+      var cx2 = W * ((c2 * 0.137) % 1) + Math.sin(t * 0.0009 + c2) * 16 * k;
+      var cy2 = bedY + (H - bedY) * (0.24 + 0.68 * ((c2 * 0.271) % 1)) + Math.cos(t * 0.0011 + c2 * 2.1) * 5 * k;
+      var rr2 = (9 + Math.abs(Math.sin(t * 0.0015 + c2)) * 15) * k;
+      ctx.globalAlpha = 0.42;
+      ctx.drawImage(causticSprite(), cx2 - rr2 * 1.6, cy2 - rr2 * 0.45, rr2 * 3.2, rr2 * 0.9);
     }
+    ctx.globalAlpha = 1;
+    ctx.restore();
 
-    // 气泡：高光点 + 薄边
+    // ---- 悬浮微粒（水下那种细碎亮尘，比大气泡更像实拍）
     aqua.bubbles.forEach(function (b) {
-      var br = b.r * (0.6 + b.z) * Math.min(1.6, k);
-      ctx.globalAlpha = 0.12 + b.z * 0.35;
-      ctx.strokeStyle = 'rgba(205, 244, 255, .85)';
-      ctx.lineWidth = Math.max(0.7, br * 0.28);
+      var br = Math.max(0.5, b.r * (0.45 + b.z * 0.5) * Math.min(1.5, k));
+      ctx.globalAlpha = 0.10 + b.z * 0.30;
+      ctx.fillStyle = 'rgba(228,250,255,.9)';
       ctx.beginPath();
       ctx.arc(b.x, b.y, br, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,.55)';
-      ctx.beginPath();
-      ctx.arc(b.x - br * 0.35, b.y - br * 0.35, Math.max(0.4, br * 0.24), 0, Math.PI * 2);
       ctx.fill();
     });
     ctx.globalAlpha = 1;
 
-    // 布景层次：沉木在鱼后面 → 鱼（远→雾→近）→ 岩石与水草挡在鱼前面
-    drawDecorBack(ctx, W, H, t, k);
+    // ---- 鱼：远 → 雾 → 近
     var sorted = aqua.fishes.slice().sort(function (a, b) { return a.z - b.z; });
     var far = [], near = [];
     sorted.forEach(function (f) { (f.z < 0.58 ? far : near).push(f); });
-    far.forEach(function (f) { drawFishSprite(ctx, f, t, k, true); });
+    far.forEach(function (f) { drawFishSprite(ctx, f, t, fk, true); });
     if (far.length && near.length) {
-      ctx.fillStyle = 'rgba(10, 48, 66, .16)';
+      // 中景水色薄雾：把远近拉开，跟视频里的能见度一个感觉
+      ctx.fillStyle = 'rgba(16,104,132,.14)';
       ctx.fillRect(0, 0, W, H);
     }
-    near.forEach(function (f) { drawFishSprite(ctx, f, t, k, false); });
-    drawDecorFront(ctx, W, H, t, k);
+    near.forEach(function (f) { drawFishSprite(ctx, f, t, fk, false); });
 
-    // 底部水体雾 + 暗角，压住边缘、凸出中间
-    var fg = ctx.createLinearGradient(0, H * 0.72, 0, H);
-    fg.addColorStop(0, 'rgba(8, 34, 46, 0)');
-    fg.addColorStop(1, 'rgba(4, 18, 26, .55)');
+    // ---- 前景细草：挡在鱼前面，跟着水流摆
+    drawWeeds(ctx, W, H, t, k);
+
+    // ---- 收尾：河床底部一点点压暗 + 轻暗角（视频里四周也是稍暗的）
+    var fg = ctx.createLinearGradient(0, H * 0.86, 0, H);
+    fg.addColorStop(0, 'rgba(8, 46, 60, 0)');
+    fg.addColorStop(1, 'rgba(6, 34, 46, .42)');
     ctx.fillStyle = fg;
-    ctx.fillRect(0, H * 0.72, W, H * 0.28);
-    var vg = ctx.createRadialGradient(W * 0.5, H * 0.42, Math.min(W, H) * 0.28, W * 0.5, H * 0.5, Math.max(W, H) * 0.80);
+    ctx.fillRect(0, H * 0.86, W, H * 0.14);
+    var vg = ctx.createRadialGradient(W * 0.5, H * 0.38, Math.min(W, H) * 0.34, W * 0.5, H * 0.5, Math.max(W, H) * 0.82);
     vg.addColorStop(0, 'rgba(0,0,0,0)');
-    vg.addColorStop(1, 'rgba(0,0,0,.42)');
+    vg.addColorStop(1, 'rgba(2,16,24,.30)');
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, W, H);
 
@@ -1609,17 +1688,22 @@
     var W = g.w, H = g.h;
     aqua.t += Math.min(48, aqua.last ? (aqua.avgDt || 16) : 16);
 
+    // 鱼只在中上层活动：水面带下面、河床上面（视频里翘嘴也是贴中上层游）
+    var topY = H * (SURF + 0.06), botY = H * (BED - 0.04);
     aqua.fishes.forEach(function (f) {
       var speed = (0.18 + f.z * 0.55) * (0.7 + f.size * 0.4);
       f.x += f.dir * speed;
       f.y += Math.sin(aqua.t * 0.0009 * (0.6 + f.z) + f.phase) * 0.12;
-      if (f.dir > 0 && f.x > W + 60) { f.x = -60; f.y = 30 + Math.random() * (H - 70); }
-      if (f.dir < 0 && f.x < -60) { f.x = W + 60; f.y = 30 + Math.random() * (H - 70); }
+      if (f.y < topY) f.y = topY;
+      if (f.y > botY) f.y = botY;
+      if (f.dir > 0 && f.x > W + 60) { f.x = -60; f.y = topY + Math.random() * (botY - topY); }
+      if (f.dir < 0 && f.x < -60) { f.x = W + 60; f.y = topY + Math.random() * (botY - topY); }
     });
+    // 悬浮微粒：慢慢往上飘，飘出水面再从底部回来
     aqua.bubbles.forEach(function (b) {
       b.y -= b.v * (0.5 + b.z);
       b.x += Math.sin(aqua.t * 0.002 + b.seed) * 0.3;
-      if (b.y < -6) { b.y = H + 6; b.x = Math.random() * W; }
+      if (b.y < H * SURF * 0.5) { b.y = H * 0.98; b.x = Math.random() * W; }
     });
 
     drawScene(g);
@@ -1635,32 +1719,41 @@
       return {
         sp: f.sp, fm: formOf(f.sp), size: f.size, phase: i * 1.7, z: z, vary: 0.92 + Math.random() * 0.16,
         x: Math.random() * g0.w,
-        y: 30 + z * (g0.h - 80) + Math.random() * 10,
+        y: g0.h * (SURF + 0.08) + Math.random() * g0.h * (BED - SURF - 0.12),
         dir: Math.random() > 0.5 ? 1 : -1,
         speed: 0.2 + Math.random() * 0.35
       };
     });
-    // 预载这缸鱼的真实贴图（本地文件，解码完就替换掉矢量画法）
+    // 预载素材：鱼贴图 + 河床贴图（本地文件，解码完就替换掉矢量画法）
     aqua.fishes.forEach(function (f) { spriteOf(f.sp); });
-    decorImg('scene'); decorImg('decor-rock'); decorImg('decor-plants'); decorImg('decor-wood');
-    // 气泡与水草按水箱大小加密（全屏时别空得发慌）
+    decorImg('bed-lake');
+    // 微粒与细草按水箱大小加密（全屏时别空得发慌）
     var sc = Math.min(2.2, Math.max(0.9, Math.max(g0.w, g0.h) / 380));
     aqua.bubbles = [];
-    for (var i = 0; i < Math.round(18 * sc); i++) {
+    for (var i = 0; i < Math.round(26 * sc); i++) {
       aqua.bubbles.push({
         x: Math.random() * g0.w, y: Math.random() * g0.h,
-        r: 0.8 + Math.random() * 2.2, v: 0.25 + Math.random() * 0.5,
+        r: 0.7 + Math.random() * 1.8, v: 0.25 + Math.random() * 0.5,
         seed: Math.random() * 1000, z: Math.random()
       });
     }
+    // 细草：两三丛、每丛 2-4 根窄叶，高度跟着画布走（视频里就是这种稀疏矮草，不是整片大水草）
     aqua.plants = [];
-    for (var pk = 0; pk < Math.round(7 * sc); pk++) {
-      aqua.plants.push({
-        x: g0.w * ((pk * 0.14) % 1) + (Math.random() * 12 - 6),
-        h: 24 + Math.random() * 34, w: 1.6 + Math.random() * 1.4,
-        phase: Math.random() * 6,
-        color: ['#1d5a3f', '#256b4a', '#174a36'][pk % 3]
-      });
+    var hk = Math.max(0.6, Math.min(1.8, g0.h / 260));
+    var clumps = 3;
+    for (var cg = 0; cg < clumps; cg++) {
+      var clx = g0.w * (0.16 + cg * 0.34 + (Math.random() * 0.10 - 0.05));
+      var clBase = g0.h * (BED + 0.03) + Math.random() * g0.h * 0.12;
+      var blades = 2 + Math.floor(Math.random() * 3);
+      for (var bd = 0; bd < blades; bd++) {
+        aqua.plants.push({
+          x: clx + (Math.random() * 2 - 1) * g0.w * 0.035,
+          base: clBase + (Math.random() * 2 - 1) * g0.h * 0.03,
+          h: (10 + Math.random() * 16) * hk,
+          w: 0.8 + Math.random() * 0.7,
+          phase: Math.random() * 6
+        });
+      }
     }
     var hint = $('aquaHint');
     if (hint) {
