@@ -10,6 +10,9 @@ import { MAPCFG, basemapById, mapAttribution, resolveTileUrl } from '../lib/base
 import { useEnvStore } from '../stores/env'
 import { useSpotsStore } from '../stores/spots'
 import { Engine as E } from '../lib/engine'
+import { useMyStore } from '../stores/my'
+import { osrmRoute, boatOrigin } from '../lib/routes'
+import { CFG } from '../lib/cfg'
 
 const props = withDefaults(defineProps<{ pickMode?: boolean }>(), { pickMode: false })
 const emit = defineEmits<{
@@ -20,6 +23,9 @@ const emit = defineEmits<{
 
 const env = useEnvStore()
 const spots = useSpotsStore()
+const my = useMyStore()
+
+let routeToken = 0
 
 const mapEl = ref<HTMLDivElement | null>(null)
 const darkTiles = ref(!!basemapById(MAPCFG.style).dark)
@@ -53,7 +59,8 @@ async function ensureMap() {
     cands: L.layerGroup().addTo(map),
     spots: L.layerGroup().addTo(map),
     favs: L.layerGroup().addTo(map),
-    me: L.layerGroup().addTo(map)
+    me: L.layerGroup().addTo(map),
+    routes: L.layerGroup().addTo(map)
   }
   /* 点地图任意位置：选点模式下只抛坐标，否则问「把这里设为当前位置？」 */
   map.on('click', (e: any) => {
@@ -108,6 +115,14 @@ function draw() {
     }).addTo(layers.cands)
   })
 
+  // 常用地点：星标（点一下就切过去）
+  ;(my.favorites || []).forEach((f: any) => {
+    const icon = L.divIcon({ className: 'favstar', html: '★', iconSize: [20, 20], iconAnchor: [10, 10] })
+    L.marker([f.lat, f.lon], { icon })
+      .bindPopup('<b>' + esc(f.name) + '</b>' + (f.desc ? '<br>' + esc(f.desc) : ''))
+      .addTo(layers.favs)
+  })
+
   // 推荐钓点（前 8 个，颜色按分档）
   ;(spots.spots || []).slice(0, 8).forEach((s: any) => {
     const color = s.spotScore >= 75 ? '#a5e05f' : (s.spotScore >= 55 ? '#ffb454' : '#7d8fb4')
@@ -122,6 +137,8 @@ function draw() {
     m.on('click', () => spots.setNavTarget(s))
     m.addTo(layers.spots)
   })
+
+  drawRoutes()
 }
 
 function esc(s: any) {
@@ -170,7 +187,47 @@ function setCursor(cross: boolean) {
   if (map) map.getContainer().style.cursor = cross ? 'crosshair' : ''
 }
 
-defineExpose({ ensureMap, draw, fitAll, recenter, focusSpot, invalidate, applyBasemap, setCursor })
+/* ---------------------------------------------------------------- 路线
+   岸钓：真实路网（驾车到岸边）；船钓：水上直线（不是航道，只看直线距离）。
+   失败或缺目标点就退化成虚线直线，并在弹窗里说明原因 —— 与老壳同一口径。 */
+function drawRoutes() {
+  if (!map || !layers || !layers.routes || !env.me) return
+  const token = ++routeToken
+  layers.routes.clearLayers()
+  const spot = spots.selSpot || (spots.spots && spots.spots[0])
+  if (!spot) return
+
+  const origin = boatOrigin(spot, my.favorites as any, env.me as any, E.dist as any)
+  const bm = origin.pt ? E.dist(origin.pt as any, spot as any) : 0
+
+  // 船钓直线
+  if (origin.pt) {
+    L.polyline([[origin.pt.lat, origin.pt.lon], [spot.lat, spot.lon]], {
+      color: '#ff9ecb', weight: 2, dashArray: '7 7', opacity: 0.95
+    }).bindPopup('<b>船钓直线</b><br>' + E.fmtDist(bm) +
+      (origin.isFav ? '<br>起点：常用地点 ' + esc(origin.pt.name) : '<br>起点：你'))
+      .addTo(layers.routes)
+  }
+
+  // 岸钓路网
+  osrmRoute(env.me, spot, 'driving').then((r) => {
+    if (!map || !layers || !layers.routes || token !== routeToken) return
+    if (r && r.pts && r.pts.length > 1) {
+      L.polyline(r.pts, { color: '#5be7ff', weight: 3, opacity: 0.9 })
+        .bindPopup('<b>岸钓路线</b><br>' + E.fmtDist(r.meters) + ' · 约 ' + Math.round(r.minutes) + ' 分钟')
+        .addTo(layers.routes)
+    } else {
+      L.polyline([[env.me!.lat, env.me!.lon], [spot.lat, spot.lon]], {
+        color: '#5be7ff', weight: 2, dashArray: '3 5', opacity: 0.7
+      }).bindPopup('岸钓路线<br>' + (CFG.route === 'off'
+        ? '路线服务已关闭（设置里可开），这是直线距离 '
+        : '路网服务不可用，这是直线距离 ') + E.fmtDist(bm))
+        .addTo(layers.routes)
+    }
+  })
+}
+
+defineExpose({ ensureMap, draw, drawRoutes, fitAll, recenter, focusSpot, invalidate, applyBasemap, setCursor })
 
 /* ---------------------------------------------------------------- 联动 */
 onMounted(() => { if (env.me) ensureMap() })
@@ -189,6 +246,8 @@ watch(() => env.me, (me) => {
 watch(() => spots.cands, draw)
 watch(() => spots.spots, draw)
 watch(() => spots.bodies, draw)
+watch(() => spots.selSpot, () => { draw(); drawRoutes() })
+watch(() => my.favorites, () => { draw(); drawRoutes() }, { deep: true })
 watch(() => props.pickMode, (on) => setCursor(on))
 
 void E

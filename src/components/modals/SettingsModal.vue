@@ -16,6 +16,7 @@ import {
 import { BASEMAPS, MAPCFG, basemapById, saveMapCfg } from '../../lib/basemap'
 import { I18N } from '../../lib/i18n'
 import { AI } from '../../lib/ai'
+import { checkUpdate, currentBuild, currentBuildNo, getUpdateUrl, setUpdateUrl } from '../../lib/update'
 import { toast, confirmBox } from '../../lib/ui'
 
 const ui = useUiStore()
@@ -174,6 +175,8 @@ async function testAi() {
 /* ---------------------------------------------------------------- 数据与版本 */
 const storeInfo = ref('正在读取存储用量…')
 const verInfo = ref('')
+const updateUrlInput = ref('')
+const updateState = ref('未检查')
 
 function readStore() {
   const info = Store.info()
@@ -191,12 +194,19 @@ async function clearCache() {
 }
 
 function readVersion() {
-  // vite 在构建时注入的版本常量（define），拿不到就退回 app 版本号
-  const v: any = (import.meta as any).env || {}
-  verInfo.value = '界面 ' + (v.VITE_APP_VERSION || '1.0') + ' · 壳 ' + (navigator.userAgent.includes('LureCast') ? '原生' : '浏览器')
-    + ' · 数据源 Open-Meteo / OpenStreetMap / Copernicus DEM' + (CFG.satFallback ? ' / Sentinel-2' : '')
+  verInfo.value = '当前 ' + currentBuild() + '（build ' + currentBuildNo() + '）· 网页版与安卓壳同一套界面'
+  updateUrlInput.value = getUpdateUrl()
 }
 
+
+function saveUpdateUrl(v: string) {
+  setUpdateUrl(v)
+  updateState.value = '未检查'
+}
+
+async function doCheckUpdate() {
+  await checkUpdate((t) => { updateState.value = t })
+}
 watch(visible, (on) => {
   if (!on) return
   langNow.value = I18N.get()
@@ -367,8 +377,23 @@ watch(visible, (on) => {
             </div>
           </div>
           <div class="field">
-            <label>版本</label>
+            <label>版本与更新</label>
             <p class="hint">{{ verInfo }}</p>
+            <div class="field" style="margin-top:8px">
+              <label>更新源（可留空）<span class="hint-inline">一个公开可访问的 version.json，或 GitHub Release API</span></label>
+              <input :value="updateUrlInput" placeholder="https://…/version.json 或 https://api.github.com/repos/owner/repo/releases/latest"
+                     autocomplete="off" @change="saveUpdateUrl(($event.target as HTMLInputElement).value)">
+            </div>
+            <div class="chiprow" style="margin-top:8px">
+              <button class="act ghost" @click="doCheckUpdate">检查更新</button>
+              <span class="hint">{{ updateState }}</span>
+            </div>
+            <p class="hint">
+              格式：<code>{"build":19,"apk":"https://…/LureCast.apk","notes":"这次改了什么","url":"发布页"}</code>。
+              填 GitHub Release API 时自动取最新 release 的 <code>.apk</code> 与说明。
+              <b>私有仓库没法直接给 App 读</b>：把 APK 放到公开 Release／网盘再填直链。
+              点「去下载」交给系统浏览器，下载完点一下安装（覆盖安装不丢数据）。
+            </p>
           </div>
           <p class="hint">
             渔获照片、常用地点、设置、卫星快照都放在本机 IndexedDB（比 localStorage 大得多，不会 5 MB 就满）。
