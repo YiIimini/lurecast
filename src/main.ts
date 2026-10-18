@@ -31,6 +31,10 @@ function boot() {
   app.use(createPinia())
   app.mount('#app')
 
+  /* 挂载后再跑一次 i18n：apply() 里的 DOM 文案替换 + MutationObserver 都要等 body 与卡片渲染出来，
+     在挂载前调用只会扫到空壳（英文/繁体启动时就会一直是中文）。 */
+  I18N.apply()
+
   // 挂载后把 [data-icon] 填成 SVG（与 legacy 页面同一套图标）
   const icons = (window as any).Icons
 

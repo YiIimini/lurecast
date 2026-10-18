@@ -7,6 +7,7 @@
    （cardLoc/cardScore/.../cardAqua），标题是 h2。
    新壳里 Vue 渲染的文字不会自动跟着变，切语言后调用一次 apply() 即可（与老壳行为一致）。 */
 import { Store } from './store'
+import { PHRASES, PATTERNS } from './i18n-phrases'
   var KEY = 'lc:lang';
   var LANGS = [
     { id: 'zh-Hans', name: '简体中文', short: '简' },
@@ -87,6 +88,136 @@ import { Store } from './store'
     'chart.tide': ['时间（潮位 m）', '時間（潮位 m）', 'Time (tide level m)']
   };
 
+  /* ---------------------------------------------------------------- DOM 级文案替换
+     新壳正文是 Vue 直接渲染的静态中文，逐句 t() 要改上百处模板；这里改成「按原文对照表替换
+     DOM 文本」：源文案在 src/lib/i18n-phrases.ts（简体原文 → [繁体, English]）。
+     地名、用户笔记这类数据不在表里，所以不会误翻用户内容。
+     · 文本节点：整串精确匹配；带数字的动态文案走 PATTERNS 正则；
+     · 属性：placeholder / title / aria-label / data-tip / alt；
+     · MutationObserver 盯着 body：页签切换、弹窗、toast 里新冒出来的文案也会翻；
+     · 切回简体用 WeakMap 里存的原文还原。 */
+  var SRC_OF: any = {};
+  (function () {
+    Object.keys(PHRASES).forEach(function (zh) {
+      SRC_OF[zh] = zh;
+      SRC_OF[PHRASES[zh][0]] = zh;
+      SRC_OF[PHRASES[zh][1]] = zh;
+    });
+  })();
+  var ATTRS = ['placeholder', 'title', 'aria-label', 'data-tip', 'alt'];
+  var SKIP_TAGS: any = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, INPUT: 1, SELECT: 1, OPTION: 1 };
+  var ORIG_NODE = new WeakMap();
+  var ORIG_ATTR = new WeakMap();
+  var observer: any = null;
+
+  function keyOf(s) { return String(s).replace(/\s+/g, ' ').trim(); }
+
+  function morph(zh, which) {
+    var row = PHRASES[zh];
+    if (row) return which === 0 ? row[0] : row[1];
+    for (var i = 0; i < PATTERNS.length; i++) {
+      var m = PATTERNS[i][0].exec(zh);
+      if (!m) continue;
+      var tpl = which === 0 ? PATTERNS[i][1] : PATTERNS[i][2];
+      return tpl.replace(/\$(\d)/g, function (_s, d) { return m[Number(d)] == null ? '' : m[Number(d)]; });
+    }
+    return null;
+  }
+
+  function trTextNode(node, which) {
+    var raw = node.nodeValue;
+    if (!raw) return;
+    var k = keyOf(raw);
+    if (!k) return;
+    var stored = ORIG_NODE.get(node);
+    if (which === -1) {                      // 切回简体：还原存下来的原文
+      if (stored && stored !== k) node.nodeValue = raw.replace(k, stored);
+      return;
+    }
+    if (PHRASES[k]) {                        // 当前就是源文案
+      var out = morph(k, which);
+      if (out != null && out !== k) {
+        ORIG_NODE.set(node, k);
+        node.nodeValue = raw.replace(k, out);
+      }
+      return;
+    }
+    // 动态文案（带数字）没有对照表条目，直接把当前文本当源交给 PATTERNS 试一次；
+    // 匹配不上（用户数据、地名）时 morph 返回 null，原样不动。
+    var zh = stored || SRC_OF[k] || k;
+    if (!zh) return;
+    var out2 = morph(zh, which);
+    if (out2 == null) return;
+    if (!stored) ORIG_NODE.set(node, zh);
+    var next = raw.replace(k, out2);
+    if (next === raw) return;                 // 同上：目标文案相同就不写，避免来回触发
+    node.nodeValue = next;
+  }
+
+  function trAttrs(el, which) {
+    if (!el.getAttribute) return;
+    var saved = ORIG_ATTR.get(el);
+    for (var i = 0; i < ATTRS.length; i++) {
+      var a = ATTRS[i];
+      var v = el.getAttribute(a);
+      if (!v) continue;
+      var k = keyOf(v);
+      if (!k) continue;
+      if (which === -1) {
+        var orig = saved && saved[a];
+        if (orig && orig !== k) el.setAttribute(a, orig);
+        continue;
+      }
+      var zh = (saved && saved[a]) || (PHRASES[k] ? k : SRC_OF[k]);
+      if (!zh) continue;
+      var out = morph(zh, which);
+      if (out == null || out === v) continue;   // 已经是目标文案就别写回（避免 observer 自激）
+      if (!saved) { saved = {}; ORIG_ATTR.set(el, saved); }
+      if (!saved[a]) saved[a] = zh;
+      el.setAttribute(a, out);
+    }
+  }
+  function walk(el, which) {
+    if (!el) return;
+    if (el.nodeType === 3) { trTextNode(el, which); return; }
+    if (el.nodeType !== 1) return;
+    // 表单控件不翻内容，但 placeholder/title 要翻
+    if (SKIP_TAGS[el.tagName]) { trAttrs(el, which); return; }
+    if (el.hasAttribute && el.hasAttribute('data-i18n-skip')) return;
+    trAttrs(el, which);
+    for (var n = el.firstChild; n; n = n.nextSibling) walk(n, which);
+  }
+
+  function applyDom(root?) {
+    var which = lang === 'en' ? 1 : (lang === 'zh-Hant' ? 0 : -1);
+    walk(root || document.body, which);
+  }
+
+  /* 页签/弹窗/toast 里的新文案也要翻：盯 body，80 ms 合并一次 */
+  function startObserver() {
+    if (observer || typeof MutationObserver === 'undefined') return;
+    var timer: any = 0;
+    /* 队列必须跨回调累积：一次页签切换会连发几十个 MutationRecord，
+       若只在「第一个回调」里抓 records，后面的就丢了（表现为这些卡片一直不翻）。 */
+    var queue: any[] = [];
+    function flush() {
+      timer = 0;
+      var which = lang === 'en' ? 1 : 0;
+      var batch = queue.splice(0, queue.length);
+      for (var i = 0; i < batch.length; i++) {
+        var r = batch[i];
+        if (r.type === 'characterData') trTextNode(r.target, which);
+        else for (var j = 0; j < r.addedNodes.length; j++) walk(r.addedNodes[j], which);
+      }
+    }
+    observer = new MutationObserver(function (records) {
+      if (lang === 'zh-Hans') return;
+      for (var i = 0; i < records.length; i++) queue.push(records[i]);
+      if (!timer) timer = setTimeout(flush, 80);
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  }
+
   var lang = 'zh-Hans';
   function load() {
     try {
@@ -157,15 +288,17 @@ import { Store } from './store'
     if (window.LureCast && window.LureCast.renderAll) {
       try { window.LureCast.renderAll(); } catch (e) { /* 首次可能没数据 */ }
     }
+    // 最后过一遍 DOM：Vue 渲染的正文（卡片里的说明、按钮、提示）都靠这一步
+    try { applyDom(); startObserver(); } catch (e) { /* 还没 body 就跳过 */ }
   }
 
   window.I18N = {
-    LANGS: LANGS, load: load, save: save, t: t, apply: apply, set: set,
+    LANGS: LANGS, load: load, save: save, t: t, apply: apply, set: set, applyDom: applyDom,
     get: function () { return lang; },
     isZh: function () { return lang !== 'en'; }
   };
 export const I18N = {
-  LANGS: LANGS, load: load, save: save, t: t, apply: apply, set: set,
+  LANGS: LANGS, load: load, save: save, t: t, apply: apply, set: set, applyDom: applyDom,
   get: function () { return lang; },
   isZh: function () { return lang !== 'en'; }
 }

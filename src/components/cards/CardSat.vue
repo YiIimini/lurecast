@@ -6,7 +6,7 @@
    蓝绿比推水深、SCL 去云、蓝绿比异常点当「水下浅脊/硬底」。
    这一层只负责：按钮、进度文字、canvas、期次与异常点列表、缩放重读。
    geotiff.js（310 KB）在第一次分析时才拉（lib/geotiff-loader）。 */
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useEnvStore } from '../../stores/env'
 import { useSpotsStore } from '../../stores/spots'
 import { CFG } from '../../lib/cfg'
@@ -56,13 +56,17 @@ async function analyse() {
   try {
     await geotiffReady()
     progress.value = '检索影像…'
-    const r = await Sat.analyse(env.me.lat, env.me.lon, {
+    // 注意参数顺序：analyse(lon, lat)，别再传反了（传反会检索到地球另一边的影像，
+    // 表现就是「采样 1×1 / 水体占比 100%」这种莫名其妙的结果）
+    const r = await Sat.analyse(env.me.lon, env.me.lat, {
       radiusKm: zoomKm.value,
       size: 768,
       onProgress: (t: string) => { progress.value = t }
     })
     res.value = r
     progress.value = ''
+    // 卡片是 v-if 切出来的：先让 DOM 挂上 canvas，再画，否则 canvas 还是 300×150 的默认尺寸
+    await nextTick()
     draw()
     syncAnomalies()
   } catch (e: any) {
@@ -84,6 +88,7 @@ async function rereadZoom() {
   busy.value = true
   try {
     res.value = await Sat.reread(res.value, zoomKm.value)
+    await nextTick()
     draw()
     syncAnomalies()
   } catch (e: any) {
@@ -98,6 +103,7 @@ async function pickScene(id: string) {
   busy.value = true
   try {
     res.value = await Sat.setScene(res.value, 'low', id)
+    await nextTick()
     draw()
     syncAnomalies()
   } catch (e: any) {

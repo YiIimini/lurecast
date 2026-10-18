@@ -1,7 +1,7 @@
 // @ts-nocheck
 /* LureCast · 卫星水面 / 水下结构（P4）—— 由 assets/sat.js 机械迁移
    ---------------------------------------------------------------------------
-   跨 3 年抽查 6 期 Sentinel-2 L2A（AWS 开放数据 STAC），挑库水位最低的一期当主影像；
+   跨 3 年抽查 3 期 Sentinel-2 L2A（AWS 开放数据 STAC），挑库水位最低的一期当主影像；
    只下载你周围 1–2 km 那一小块 COG 切片（GeoTIFF.fromUrl 必须带 allowFullFile:false，
    否则可能整幅 190 MB 全下）。蓝绿比推水深、SCL 去云、异常点用于「水下有结构」提示。
    geotiff.js（310 KB）不打包进 app chunk：第一次分析影像时才用 ?url 拉进来（见 lib/geotiff-loader）。
@@ -10,8 +10,23 @@ import { GeoTIFF } from './geotiff-loader'
 
 /* 老壳这几个常量在 IIFE 顶部，机械迁移时漏了会报 D2R is not defined —— 补回来 */
 var STAC = 'https://earth-search.aws.element84.com/v1/search'
-var metaCache: any = {}     // href -> Promise<{tiff, levels}>
+var metaCache: any = {}     // href|blockSize -> Promise<{tiff, levels}>
 var D2R = Math.PI / 180
+
+/* ---------------------------------------------------------------- 慢网策略（P4j）
+   实测（本机 → us-west-2 的 S3）：首字节 3.4–4 s，吞吐 60–100 KB/s ——
+   也就是说一次 range 请求的代价几乎全是「延迟」，不是「流量」。所以三条对策：
+     1) 少开文件：颜色改用 TCI（visual，红绿蓝在同一个文件里），水体改用 SCL，
+        一期影像 2 个文件搞定；老壳是 blue/green/red/nir/scl 各开一遍（5 个）。
+     2) 少发请求：blockSize 调大，geotiff 的 BlockedSource 会把这么大一块一次拉下来并缓存
+        （实测 512 KB 一发 8.4 s，8 发 64 KB 串行 28 s）。
+     3) 并行发：file 之间、block 之间都用 Promise.all（实测 3 个并行 4.0 s vs 串行 13.1 s）。 */
+var BLOCK = 131072          // 一次 range 请求的字节数
+var CACHE = 96              // 每个 COG 最多缓存多少个块（96×128 KB ≈ 12 MB）
+var DBG = false             // 临时诊断开关：控制台打印选层/窗口信息（定位窗口算错时用）
+function openOpts(block?: number) {
+  return { allowFullFile: false, blockSize: block || BLOCK, cacheSize: CACHE }
+}
 
 /* ---------------------------------------------------------------- 经纬度 → UTM（S2 瓦片都是 UTM） */
   function lonLatToUtm(lon, lat, epsg) {
@@ -86,15 +101,49 @@ var D2R = Math.PI / 180
     });
   }
 
-  /* ---------------------------------------------------------------- COG 打开 + 金字塔层级 */
-  function bandMeta(item, key) {
-    var href = item.assets[key].href;
-    if (!metaCache[href]) {
-      metaCache[href] = GeoTIFF.fromUrl(href, { allowFullFile: false }).then(function (tiff) {
+  /* ---------------------------------------------------------------- COG 打开 + 金字塔层级
+     block = 一次 range 请求拉多少字节。慢网下这是「请求数」的唯一旋钮：
+     探测期只要最粗一层，用小一点的块；正式读影像用大块，尽量少发几次。 */
+  /* 地理参考：以 STAC 的 proj:transform / proj:shape 为准。
+     TCI.tif（visual）这类文件里常常根本没有 GeoKey，直接读出来是 origin=[0,0]、res=[1,-1]，
+     拿它算窗口会整块落在影像外 —— 外在表现就是「采样 1×1」。
+     所以顺序是：本波段的 transform → 同景任一兄弟波段的 transform（S2 各波段共用一个左上角）
+     → 文件里的 GeoKey → 都不行就按像素读并在控制台告警。
+     transform = [a,0,c,0,e,f]：a/e 是像素大小，c/f 是左上角坐标。 */
+  function georefOf(item, key, im0) {
+    var assets = item.assets || {};
+    var a = assets[key] || {};
+    var w1 = im0.getWidth(), h1 = im0.getHeight();
+    if (a['proj:transform'] && a['proj:shape']) {
+      var t = a['proj:transform'], s = a['proj:shape'];
+      return { source: 'asset', origin: [t[2], t[5]], res0: [t[0], t[4]], w0: s[1], h0: s[0] };
+    }
+    for (var k in assets) {
+      var b = assets[k] || {};
+      if (k === key || !b['proj:transform'] || !b['proj:shape']) continue;
+      var tb = b['proj:transform'], sb = b['proj:shape'];
+      // 同景各波段的左上角同一个点，用兄弟波段的像素大小 × 宽度比反推本层分辨率
+      return {
+        source: 'sibling', origin: [tb[2], tb[5]],
+        res0: [Math.abs(tb[0]) * sb[1] / w1, -Math.abs(tb[4]) * sb[0] / h1],
+        w0: w1, h0: h1
+      };
+    }
+    var o = im0.getOrigin(), r = im0.getResolution();
+    var bad = (!o || (o[0] === 0 && o[1] === 0)) || !r || Math.abs(r[0]) < 1e-6;
+    return { source: bad ? 'none' : 'geokey', origin: o, res0: r, w0: w1, h0: h1 };
+  }
+
+  function bandMeta(item, key, block) {
+    var asset = item.assets[key] || {};
+    var href = asset.href;
+    var ck = href + '|' + (block || BLOCK);
+    if (!metaCache[ck]) {
+      metaCache[ck] = GeoTIFF.fromUrl(href, openOpts(block)).then(function (tiff) {
         return tiff.getImage(0).then(function (im0) {
-          var origin = im0.getOrigin();
-          var res0 = im0.getResolution();
-          var w0 = im0.getWidth(), h0 = im0.getHeight();
+          var g = georefOf(item, key, im0);
+          var origin = g.origin, res0 = g.res0, w0 = g.w0, h0 = g.h0;
+          if (g.source === 'none') console.warn('[sat] 没有地理参考，只能按像素读：' + key);
           return tiff.getImageCount().then(function (n) {
             var levels = [{ i: 0, w: w0, h: h0, res: Math.abs(res0[0]) }];
             var chain = Promise.resolve();
@@ -110,89 +159,181 @@ var D2R = Math.PI / 180
               })(i);
             }
             return chain.then(function () {
-              return { tiff: tiff, origin: origin, res0: res0, levels: levels, w0: w0, h0: h0 };
+              // 按「地面分辨率从细到粗」排序：后面的选层逻辑依赖这个顺序
+              levels.sort(function (a, b) { return a.res - b.res; });
+              return { tiff: tiff, origin: origin, res0: res0, levels: levels, w0: w0, h0: h0, georefSrc: g.source };
             });
           });
         });
       });
     }
-    return metaCache[href];
+    return metaCache[ck];
   }
 
-  /* 读一块地物窗口：bboxLonLat → UTM → 选层级 → 像素 window → 读
-     outPx: 输出边长像素；永远挑「刚刚够覆盖」的那一层，避免下载全分辨率瓦片 */
-  function readAt(item, key, bboxLonLat, outPx) {
-    var epsg = item.properties['proj:epsg'];
-    var box = utmBox(bboxLonLat, epsg);
-    var want = (box[2] - box[0]) / outPx;      // 目标地面分辨率 m/px
-    return bandMeta(item, key).then(function (meta) {
-      // 选「刚刚够覆盖目标分辨率」的那一层：既不掉精度，也不白拉全分辨率瓦片
-      // 输出不做重采样，所以选「能装进 outPx 的最精细那一层」：
-      // 从最细往粗找，第一个原生像素数 <= outPx 的就是它
-      var lvl = meta.levels[meta.levels.length - 1];
-      for (var i = 0; i < meta.levels.length; i++) {
-        var px = (box[2] - box[0]) / meta.levels[i].res;
-        if (px <= outPx * 1.05) { lvl = meta.levels[i]; break; }
-      }
-      var res = meta.levels[0].res * meta.w0 / lvl.w;
-      // 注意 y 轴方向：origin 是左上（北）角，行号随纬度下降而增加
-      var x0 = Math.max(0, Math.min(lvl.w - 1, Math.floor((box[0] - meta.origin[0]) / res)));
-      var x1 = Math.max(x0 + 1, Math.min(lvl.w, Math.ceil((box[2] - meta.origin[0]) / res)));
-      var y0 = Math.max(0, Math.min(lvl.h - 1, Math.floor((meta.origin[1] - box[3]) / res)));
-      var y1 = Math.max(y0 + 1, Math.min(lvl.h, Math.ceil((meta.origin[1] - box[1]) / res)));
-      // 关键：输出尺寸＝窗口原生像素数，绝不做二次重采样（重采样会让影像明显发糊）
-      var w = Math.min(outPx, x1 - x0), h = Math.min(outPx, y1 - y0);
-      return meta.tiff.getImage(lvl.i).then(function (im) {
-        return im.readRasters({
-          window: [x0, y0, x1, y1], width: x1 - x0, height: y1 - y0,
-          resampleMethod: 'nearest', interleave: false
-        }).then(function (r) {
-          return { data: r[0], level: lvl.i, res: res, w: x1 - x0, h: y1 - y0 };
+  /* bbox（已转 UTM）→ 选层 + 像素窗口
+     永远挑「能装进 outPx 的最精细那一层」：既不掉精度，也不白拉全分辨率瓦片；
+     输出尺寸＝窗口原生像素数，不做二次重采样（重采样会让影像明显发糊）。 */
+  function levelWindow(meta, box, outPx) {
+    var lvl = meta.levels[meta.levels.length - 1];
+    for (var i = 0; i < meta.levels.length; i++) {
+      var px = (box[2] - box[0]) / meta.levels[i].res;
+      if (px <= outPx * 1.05) { lvl = meta.levels[i]; break; }
+    }
+    var res = meta.levels[0].res * meta.w0 / lvl.w;
+    // 注意 y 轴方向：origin 是左上（北）角，行号随纬度下降而增加
+    var x0 = Math.max(0, Math.min(lvl.w - 1, Math.floor((box[0] - meta.origin[0]) / res)));
+    var x1 = Math.max(x0 + 1, Math.min(lvl.w, Math.ceil((box[2] - meta.origin[0]) / res)));
+    var y0 = Math.max(0, Math.min(lvl.h - 1, Math.floor((meta.origin[1] - box[3]) / res)));
+    var y1 = Math.max(y0 + 1, Math.min(lvl.h, Math.ceil((meta.origin[1] - box[1]) / res)));
+    if (DBG) console.info('[sat] win box=' + box.map(function (v) { return Math.round(v); }).join(',') +
+      ' origin=' + meta.origin.map(function (v) { return Math.round(v); }).join(',') +
+      ' res=' + res.toFixed(2) + ' lvl=' + lvl.i + ' w=' + (x1 - x0) + ' h=' + (y1 - y0));
+    return { lvl: lvl, res: res, window: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+  }
+
+  /* 读一个文件的窗口；resampleTo=[W,H] 时把结果重采样到指定网格（SCL 20 m → 颜色 10 m 就是这用法） */
+  function readWindow(item, key, box, outPx, block, resampleTo) {
+    return bandMeta(item, key, block).then(function (meta) {
+      if (DBG) console.info('[sat] read ' + key + ' epsg=' + item.properties['proj:epsg'] +
+        ' georef=' + meta.georefSrc + ' id=' + String(item.id).slice(0, 24));
+      var L = levelWindow(meta, box, outPx);
+      return meta.tiff.getImage(L.lvl.i).then(function (im) {
+        var o = { window: L.window, resampleMethod: 'nearest', interleave: false };
+        o.width = resampleTo ? resampleTo[0] : L.w;
+        o.height = resampleTo ? resampleTo[1] : L.h;
+        return im.readRasters(o).then(function (r) {
+          return { bands: r, level: L.lvl.i, res: L.res, w: L.w, h: L.h };
         });
       });
     });
   }
 
-  /* 用 L2A 自带的场景分类波段（SCL）取水体：class 6 = 水面。
-     比 NDWI 阈值可靠得多（SCL 已考虑云、阴影、雪），NDWI 只在 SCL 不可用时兜底。
-     SCL 是 20 m，但通过 width/height 重采样到和可见光同一张网格。 */
-  function readScl(item, bboxLonLat, W, H) {
-    if (!item.assets || !item.assets.scl) return Promise.resolve(null);
-    var epsg = item.properties['proj:epsg'];
-    var box = utmBox(bboxLonLat, epsg);
-    return bandMeta(item, 'scl').then(function (meta) {
-      var lvl = meta.levels[meta.levels.length - 1];
-      for (var i = 0; i < meta.levels.length; i++) {
-        var px = (box[2] - box[0]) / meta.levels[i].res;
-        if (px <= Math.max(W, H) * 1.1) { lvl = meta.levels[i]; break; }
-      }
-      var res = meta.levels[0].res * meta.w0 / lvl.w;
-      var x0 = Math.max(0, Math.min(lvl.w - 1, Math.floor((box[0] - meta.origin[0]) / res)));
-      var x1 = Math.max(x0 + 1, Math.min(lvl.w, Math.ceil((box[2] - meta.origin[0]) / res)));
-      var y0 = Math.max(0, Math.min(lvl.h - 1, Math.floor((meta.origin[1] - box[3]) / res)));
-      var y1 = Math.max(y0 + 1, Math.min(lvl.h, Math.ceil((meta.origin[1] - box[1]) / res)));
-      return meta.tiff.getImage(lvl.i).then(function (im) {
-        return im.readRasters({ window: [x0, y0, x1, y1], width: W, height: H, resampleMethod: 'nearest', interleave: false });
-      }).then(function (r) { return r[0]; });
-    }).catch(function () { return null; });
+  /* 单波段读一块（保留旧签名：Sat.readAt 与自检脚本还在用） */
+  function readAt(item, key, bboxLonLat, outPx, block) {
+    var box = utmBox(bboxLonLat, item.properties['proj:epsg']);
+    return readWindow(item, key, box, outPx, block).then(function (r) {
+      return { data: r.bands[0], level: r.level, res: r.res, w: r.w, h: r.h };
+    });
   }
 
-  /* 水体制占比：NDWI = (绿 - 近红外)/(绿 + 近红外)，> 0.05 记作水体 */
+  /* 颜色：优先 TCI（visual）—— 红绿蓝 3 个波段在同一个文件里，只开一次 COG、发一轮请求；
+     没有 visual 才退回 blue/green/red 三个文件。TCI 是 8 bit，分析里用的一直是比值，不影响结论。 */
+  function readColor(item, bboxLonLat, outPx) {
+    var box = utmBox(bboxLonLat, item.properties['proj:epsg']);
+    if (item.assets && item.assets.visual) {
+      return readWindow(item, 'visual', box, outPx).then(function (r) {
+        var b = r.bands;
+        return {
+          red: b[0], green: b[1], blue: b[2],
+          size: r.w, width: r.w, height: r.h, bbox: bboxLonLat,
+          res: r.res, level: r.level, source: 'visual'
+        };
+      }).catch(function () { return readColorThree(item, box, outPx, bboxLonLat); });
+    }
+    return readColorThree(item, box, outPx, bboxLonLat);
+  }
+
+  function readColorThree(item, box, outPx, bboxLonLat) {
+    return Promise.all(['blue', 'green', 'red'].map(function (k) { return readWindow(item, k, box, outPx); }))
+      .then(function (r) {
+        return {
+          blue: r[0].bands[0], green: r[1].bands[0], red: r[2].bands[0],
+          size: r[0].w, width: r[0].w, height: r[0].h, bbox: bboxLonLat,
+          res: r[0].res, level: r[0].level, source: 'bands'
+        };
+      });
+  }
+
+  /* 水体掩膜：SCL（20 m 场景分类，class 6 = 水面）只要 1 个文件，优先；
+     没有 SCL、或 SCL 说「一滴水都没有」而 NDWI 明明看到水，就退回 NDWI（green + nir 两个文件）。 */
+  function readWater(item, bboxLonLat, outPx, resampleTo) {
+    var box = utmBox(bboxLonLat, item.properties['proj:epsg']);
+    function ndwiWater() {
+      return Promise.all([
+        readWindow(item, 'green', box, outPx), readWindow(item, 'nir', box, outPx)
+      ]).then(function (r) {
+        var g = r[0].bands[0], n = r[1].bands[0];
+        var mask = new Uint8Array(g.length), water = 0, valid = 0;
+        for (var i = 0; i < g.length; i++) {
+          if (!isFinite(g[i]) || !isFinite(n[i]) || (g[i] <= 0 && n[i] <= 0)) continue;
+          valid++;
+          if ((g[i] - n[i]) / (g[i] + n[i]) > 0.05) { water++; mask[i] = 1; }
+        }
+        return {
+          frac: valid ? water / valid : null, mask: mask, valid: valid, maskSource: 'ndwi',
+          validFrac: g.length ? valid / g.length : 0,
+          level: r[0].level, res: r[0].res,
+          w: resampleTo ? resampleTo[0] : r[0].w, h: resampleTo ? resampleTo[1] : r[0].h
+        };
+      });
+    }
+    if (!item.assets || !item.assets.scl) return ndwiWater();
+    return readWindow(item, 'scl', box, outPx, BLOCK, resampleTo).then(function (r) {
+      var scl = r.bands[0], mask = new Uint8Array(scl.length), water = 0, valid = 0;
+      for (var i = 0; i < scl.length; i++) {
+        var v = scl[i];
+        if (!isFinite(v) || v <= 0) continue;
+        valid++;
+        if (v === 6) { mask[i] = 1; water++; }
+      }
+      if (!valid) throw new Error('SCL 全空');
+      var frac = water / valid;
+      if (frac < 0.005) {
+        // 分类结果说没水：可能是薄云/阴影把水面分错了，用 NDWI 复核一次再决定
+        return ndwiWater().then(function (alt) {
+          return (alt.frac != null && alt.frac > frac) ? alt : {
+            frac: frac, mask: mask, valid: valid, maskSource: 'scl',
+            validFrac: scl.length ? valid / scl.length : 0,
+            level: r.level, res: r.res,
+            w: resampleTo ? resampleTo[0] : r.w, h: resampleTo ? resampleTo[1] : r.h
+          };
+        });
+      }
+      return {
+        frac: frac, mask: mask, valid: valid, maskSource: 'scl',
+        validFrac: scl.length ? valid / scl.length : 0,
+        level: r.level, res: r.res,
+        w: resampleTo ? resampleTo[0] : r.w, h: resampleTo ? resampleTo[1] : r.h
+      };
+    }).catch(function () { return ndwiWater(); });
+  }
+
   /* 场景读取缓存：同一期影像（同窗口同尺寸）只读一次，用户来回切期次才够快 */
   var sceneCache = {};
 
   function loadScene(item, bbox, size) {
     var key = item.id + '|' + bbox.map(function (v) { return v.toFixed(4); }).join(',') + '|' + size;
     if (sceneCache[key]) return Promise.resolve(sceneCache[key]);
-    return readBands(item, bbox, size).then(function (bands) {
-      var W = bands.width || bands.size, H = bands.height || bands.size;
-      return readWater(item, bbox, size).then(function (w) {
+    var hasVisual = !!(item.assets && item.assets.visual);
+    var box = utmBox(bbox, item.properties['proj:epsg']);
+    /* 先只读元数据拿到输出网格，然后把「颜色」和「水体」两组请求同时发出去 ——
+       慢网下单发和并发的差别是「多等 6 秒」还是「不多等」。 */
+    var dimP = hasVisual
+      ? bandMeta(item, 'visual').then(function (meta) {
+          var L = levelWindow(meta, box, size);
+          return { w: Math.min(size, L.w), h: Math.min(size, L.h) };
+        })
+      : Promise.resolve({ w: size, h: size });
+    return dimP.then(function (dim) {
+      return Promise.all([
+        readColor(item, bbox, size),
+        readWater(item, bbox, size, [dim.w, dim.h])
+      ]).then(function (arr) {
+        var bands = arr[0], w = arr[1];
+        var W = bands.width || bands.size, H = bands.height || bands.size;
+        // 网格对不上（没 visual 时先猜的尺寸）就按真实尺寸重读一次掩膜，保证与颜色逐像素对齐
+        if (w.mask.length !== W * H) {
+          return readWater(item, bbox, size, [W, H]).then(function (w2) { return { bands: bands, w: w2 }; });
+        }
+        return { bands: bands, w: w };
+      }).then(function (o) {
+        var bands = o.bands, w = o.w;
         var water = 0;
         for (var k = 0; k < w.mask.length; k++) if (w.mask[k]) water++;
         var rec = {
           item: item, bands: bands, mask: w.mask, maskSource: w.maskSource,
           validFrac: w.validFrac,
-          waterFrac: water / w.mask.length,
+          waterFrac: w.mask.length ? water / w.mask.length : null,
           res: bands.res, level: bands.level
         };
         sceneCache[key] = rec;
@@ -201,46 +342,22 @@ var D2R = Math.PI / 180
     });
   }
 
-  function readWater(item, bboxLonLat, size) {
-    return Promise.all([
-      readAt(item, 'green', bboxLonLat, size),
-      readAt(item, 'nir', bboxLonLat, size)
-    ]).then(function (arr) {
-      var g = arr[0].data, n = arr[1].data, water = 0, valid = 0;
-      var mask = new Uint8Array(g.length);
-      for (var i = 0; i < g.length; i++) {
-        if (!isFinite(g[i]) || !isFinite(n[i]) || (g[i] <= 0 && n[i] <= 0)) continue;
-        valid++;
-        if ((g[i] - n[i]) / (g[i] + n[i]) > 0.05) { water++; mask[i] = 1; }
-      }
-      var W = arr[0].w || Math.round(Math.sqrt(g.length));
-      var H = arr[0].h || Math.round(g.length / W);
-      return readScl(item, bboxLonLat, W, H).then(function (scl) {
-        var outMask = mask, source = 'ndwi', validN = valid, waterN = water;
-        if (scl && scl.length === mask.length) {
-          var m2 = new Uint8Array(mask.length), found = 0;
-          for (var k = 0; k < m2.length; k++) if (scl[k] === 6) { m2[k] = 1; found++; }
-          if (found > mask.length * 0.005) { outMask = m2; source = 'scl'; waterN = found; validN = mask.length; }
-        }
-        return {
-          frac: validN ? waterN / validN : null, mask: outMask, valid: validN, maskSource: source,
-          validFrac: validN / g.length, level: arr[0].level, res: arr[0].res,
-          w: W, h: H
-        };
-      });
+  /* 只读水体掩膜（对比期用）：1 个文件（SCL），重采样到主影像的网格，保证逐像素可比 */
+  var maskCache = {};
+  function loadMask(item, bbox, size, W, H) {
+    var key = 'mask|' + item.id + '|' + bbox.map(function (v) { return v.toFixed(4); }).join(',') + '|' + size + '|' + W + 'x' + H;
+    if (maskCache[key]) return Promise.resolve(maskCache[key]);
+    return readWater(item, bbox, size, [W, H]).then(function (w) {
+      var water = 0;
+      for (var i = 0; i < w.mask.length; i++) if (w.mask[i]) water++;
+      var rec = {
+        item: item, mask: w.mask, maskSource: w.maskSource, validFrac: w.validFrac,
+        waterFrac: w.mask.length ? water / w.mask.length : null,
+        res: w.res, level: w.level, maskOnly: true
+      };
+      maskCache[key] = rec;
+      return rec;
     });
-  }
-
-  function readBands(item, bboxLonLat, size) {
-    var keys = ['blue', 'green', 'red', 'nir'];
-    return Promise.all(keys.map(function (k) { return readAt(item, k, bboxLonLat, size); }))
-      .then(function (arr) {
-        return {
-          blue: arr[0].data, green: arr[1].data, red: arr[2].data, nir: arr[3].data,
-          size: arr[0].w, width: arr[0].w, height: arr[0].h,
-          bbox: bboxLonLat, res: arr[0].res, level: arr[0].level
-        };
-      });
   }
 
   /* ---------------------------------------------------------------- 选期次：按月分散后取水占比最低/最高 */
@@ -306,7 +423,16 @@ var D2R = Math.PI / 180
         cells.push({ gx: gx, gy: gy, sdb: cnt ? sum / cnt : NaN, wetFrac: tot ? wet / tot : 0 });
       }
     }
+    /* 阈值改成「按本幅数据的离散程度自适应」：
+       旧值 0.0022 是在 16 bit 反射率（0–10000）上试出来的；现在颜色波段可能来自 TCI（8 bit 0–255），
+       同一个绝对值会差一个量级。用格子 sdb 的标准差当阈值，换数据源也不用重调。 */
     var out = [];
+    var sd = 0, sdc = 0;
+    cells.forEach(function (c) { if (isFinite(c.sdb) && c.wetFrac >= 0.4) { sd += c.sdb; sdc++; } });
+    sd = sdc ? sd / sdc : 0;
+    var varSum = 0;
+    cells.forEach(function (c) { if (isFinite(c.sdb) && c.wetFrac >= 0.4) { var d0 = c.sdb - sd; varSum += d0 * d0; } });
+    var thr = sdc > 1 ? Math.max(1e-6, Math.sqrt(varSum / sdc)) : 0.0022;
     cells.forEach(function (c) {
       if (!isFinite(c.sdb) || c.wetFrac < 0.4) return;
       var ns = [];
@@ -320,10 +446,10 @@ var D2R = Math.PI / 180
       if (ns.length < 3) return;
       var mean = ns.reduce(function (a, b) { return a + b; }, 0) / ns.length;
       var dev = c.sdb - mean;
-      if (dev > 0.0022) out.push({ gx: c.gx, gy: c.gy, dev: dev });
+      if (dev > thr) out.push({ gx: c.gx, gy: c.gy, dev: dev });
     });
     out.sort(function (a, b) { return b.dev - a.dev; });
-    return { cells: out.slice(0, 8), gridN: gridN, sdb: sdb, range: range, w: W, h: H, cw: cw, ch: ch };
+    return { cells: out.slice(0, 8), gridN: gridN, sdb: sdb, range: range, w: W, h: H, cw: cw, ch: ch, thr: thr };
   }
 
   function cellToLonLat(a, bbox, gridN) {
@@ -335,6 +461,21 @@ var D2R = Math.PI / 180
   }
 
   /* ---------------------------------------------------------------- 主流程 */
+  /* 整条链路的硬超时：慢网下 geotiff 的 range 请求可能长时间不返回，
+     与其让卡片一直转，不如到点报错并告诉用户已经走到哪一步（进度是实时回传的）。 */
+  var TIMEOUT_MS = 90000;
+  function withTimeout(p, ms, onTimeout) {
+    var timer = null;
+    var guard = new Promise(function (_res, rej) {
+      timer = setTimeout(function () { rej(onTimeout()); }, ms);
+    });
+    return Promise.race([p, guard]).then(function (v) {
+      clearTimeout(timer); return v;
+    }, function (e) {
+      clearTimeout(timer); throw e;
+    });
+  }
+
   function analyse(lon, lat, opts) {
     opts = opts || {};
     var radiusKm = opts.radiusKm || 0.9;
@@ -342,22 +483,27 @@ var D2R = Math.PI / 180
     var from = new Date(Date.now() - (opts.years || 3) * 365 * 86400000).toISOString();
     var progress = opts.onProgress || function () {};
     var size = opts.size || 768;
+    var t0 = Date.now();
+    var step = function (msg) { progress(msg + '（' + Math.round((Date.now() - t0) / 1000) + 's）'); };
 
-    progress('搜索 Sentinel-2 归档…');
-    return search(bbox, { maxCloud: opts.maxCloud || 20, from: from, limit: 80 })
+    step('搜索 Sentinel-2 归档');
+    var chain = search(bbox, { maxCloud: opts.maxCloud || 20, from: from, limit: 80 })
       .then(function (items) {
         if (!items.length) throw new Error('这附近 3 年内没有云量 <20% 的 Sentinel-2 影像');
-        var sample = pickSpread(items, opts.samples || 6);
-        progress('已找到 ' + items.length + ' 期，抽查 ' + sample.length + ' 期的水位…');
+        /* 抽查 3 期就够了（原来是 6 期）：每一期都要单独开 COG，慢网下多一期就多 5–8 秒 */
+        var sample = pickSpread(items, opts.samples || 3);
+        step('已找到 ' + items.length + ' 期，抽查 ' + sample.length + ' 期的库水位');
         var out = [], cursor = 0;
         function worker() {
           if (cursor >= sample.length) return Promise.resolve();
           var it = sample[cursor++];
+          // 只看 SCL（1 个文件、最粗的金字塔层），不再为每期开 green+nir 两个文件
           return readWater(it, bbox, 64).then(function (w) {
             out.push({ item: it, frac: w.frac });
             progress('抽查 ' + out.length + '/' + sample.length + '：' +
               it.properties.datetime.slice(0, 10) + ' 水体占比 ' +
-              (w.frac == null ? 'n/a' : Math.round(w.frac * 100) + '%'));
+              (w.frac == null ? 'n/a' : Math.round(w.frac * 100) + '%') +
+              '（' + Math.round((Date.now() - t0) / 1000) + 's）');
           }).catch(function () { /* 单期失败跳过 */ }).then(worker);
         }
         var pool = [];
@@ -386,8 +532,13 @@ var D2R = Math.PI / 180
             frac: known[it.id] != null ? known[it.id] : null
           };
         });
-        return finish(r, bbox, size, radiusKm, progress);
+        return finish(r, bbox, size, radiusKm, step);
       });
+    var ms = opts.timeoutMs || TIMEOUT_MS;
+    return withTimeout(chain, ms, function () {
+      return new Error('影像下载超时（' + Math.round(ms / 1000) + ' 秒）。慢网下只读你周围这一小块也需要 10–30 秒，' +
+        '可以缩小半径或稍后重试；已下载的块会留在缓存里。');
+    });
   }
 
   /* 给定「主影像 + 对比影像 + 窗口」，算出影像、水体掩膜、两期水位差与结构候选 */
@@ -397,7 +548,10 @@ var D2R = Math.PI / 180
     progress('读取主影像 ' + lowItem.properties.datetime.slice(0, 10) + '…');
     return loadScene(lowItem, bbox, size).then(function (low) {
       progress('读取对比影像 ' + highItem.properties.datetime.slice(0, 10) + '…');
-      return loadScene(highItem, bbox, size).then(function (high) {
+      /* 对比期只需要水体掩膜（算两期水位差与「露出来的那片」），
+         不必再下一整套彩色波段 —— 慢网下这一步能省掉一半时间。 */
+      var W = low.bands.width || low.bands.size, H = low.bands.height || low.bands.size;
+      return loadMask(highItem, bbox, size, W, H).then(function (high) {
         var anom = findAnomalies(low.bands, low.mask, { gridN: 16 });
         var d = deltaMask(low.mask, high.mask);
         var points = anom.cells.map(function (c) {
@@ -473,14 +627,11 @@ var D2R = Math.PI / 180
       items.sort(function (a, b) { return a.properties['eo:cloud_cover'] - b.properties['eo:cloud_cover']; });
       var item = items[0];
       var px = opts.px || 512;
-      return Promise.all([readAt(item, 'green', bbox, px), readAt(item, 'nir', bbox, px)]).then(function (arr) {
-        var W = arr[0].w, H = arr[0].h, g = arr[0].data, n = arr[1].data;
-        var mask = new Uint8Array(W * H);
+      // 水体掩膜：有 SCL 就只开 1 个文件（20 m，class 6 直接就是水面），没有才 NDWI
+      return readWater(item, bbox, px).then(function (wtr) {
+        var W = wtr.w, H = wtr.h, mask = wtr.mask;
         var water = 0;
-        for (var i = 0; i < g.length; i++) {
-          if (!isFinite(g[i]) || !isFinite(n[i]) || (g[i] <= 0 && n[i] <= 0)) continue;
-          if ((g[i] - n[i]) / (g[i] + n[i]) > 0.05) { mask[i] = 1; water++; }
-        }
+        for (var mi = 0; mi < mask.length; mi++) if (mask[mi]) water++;
         if (water < W * H * 0.02) throw new Error('影像里几乎没有水面（云/雾或水太浑）');
 
         // 边界像素：水像素且四邻里有陆地
@@ -539,7 +690,7 @@ var D2R = Math.PI / 180
         }
         return {
           item: { date: item.properties.datetime.slice(0, 10), cloud: item.properties['eo:cloud_cover'] },
-          bbox: bbox, width: W, height: H, resolution: arr[0].res,
+          bbox: bbox, width: W, height: H, resolution: wtr.res,
           waterFrac: water / (W * H), points: kept, mask: mask
         };
       });
