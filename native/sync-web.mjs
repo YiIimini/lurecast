@@ -1,13 +1,14 @@
-/* 把 Web 应用装进 www/（P4：新壳接管 index.html，老壳留成 legacy.html 可回滚）
+/* 把 Web 应用装进 www/（P4：新壳接管 index.html）
    ---------------------------------------------------------------------------
-   用法：npm run build && npm run sync-web（package.json 里 sync-web 已带 build）
+   用法：npm run sync-web（package.json 里已带 build），然后 `npx cap sync android` 出包。
    做的事情：
-     1. 清空 www/，拷 dist-web/*（Vite 产物：index 名是 app.html，资源带 hash）；
+     1. 清空 www/，拷 dist-web/*（Vite 产物：入口名是 app.html，资源带 hash）；
      2. app.html → index.html（Capacitor 只认 index.html）；
-     3. 再拷老壳所需的文件，并把老 index.html → legacy.html：
-        assets/（老 IIFE 那套，与新壳的 hash 资源同名不冲突）、icons/、manifest；
-     4. 拷新的 sw.js（清单自动生成，不再手写）。
-   这样万一新壳出问题，手机上打开 /legacy.html 就是重构前的完整界面。 */
+     3. 拷 icons/（跳过设计源图 icons/source/）与 manifest.webmanifest；
+     4. 拷新的 sw.js（清单自动生成，不再手写）；
+     5. 顺手清空 Android 的 assets/public —— Capacitor 的 copy 不清旧文件，
+        加过一次 hash 变了的资源就会一直叠在包里（实测叠出过 1 MB 死重量）。
+   老壳（根 index.html + assets/*.js）默认不装；要手机上能回滚就加 --with-legacy。 */
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -28,12 +29,18 @@ fs.mkdirSync(dst, { recursive: true });
 fs.cpSync(dist, dst, { recursive: true });
 fs.renameSync(path.join(dst, 'app.html'), path.join(dst, 'index.html'));
 
-/* 2) 图标与 manifest（新图标来自 icons/，老壳没有也能跑） */
-for (const item of ['icons', 'manifest.webmanifest']) {
-  const from = path.join(root, item);
-  if (!fs.existsSync(from)) continue;
-  fs.cpSync(from, path.join(dst, item), { recursive: true, force: true });
+/* 2) 图标与 manifest（新图标来自 icons/，老壳没有也能跑）。
+   icons/source/ 是设计源图（1024 预览、圆角/圆形预览，共 ~0.57 MB），运行时不引用，
+   装进包里纯占地方，所以跳过。 */
+const iconsFrom = path.join(root, 'icons')
+if (fs.existsSync(iconsFrom)) {
+  fs.cpSync(iconsFrom, path.join(dst, 'icons'), {
+    recursive: true, force: true,
+    filter: (src) => path.basename(src) !== 'source'
+  })
 }
+const manifestFrom = path.join(root, 'manifest.webmanifest')
+if (fs.existsSync(manifestFrom)) fs.copyFileSync(manifestFrom, path.join(dst, 'manifest.webmanifest'))
 
 /* 3) 老壳回滚入口：默认不装（www 从 3.64 → 1.66 MB；但 APK 只从 6.90 → 6.77 MB，
    因为体积大头在 Android 侧的 classes.dex，不是 web 资源，别指望删老壳能瘦到 4 MB）。
@@ -50,7 +57,12 @@ if (withLegacy) {
 /* 4) 新 SW */
 fs.copyFileSync(path.join(root, 'sw.js'), path.join(dst, 'sw.js'));
 
-/* 5) 汇总体积，方便盯 7 MB 预算 */
+/* 5) 清空 Android 侧的 assets/public：Capacitor 的 copy 只覆盖不删除，
+   旧 hash 资源会一直叠在包里（实测叠出约 1 MB）。下一步 cap sync 会重新拷一份。 */
+const androidAssets = path.join(root, 'native/android/app/src/main/assets/public');
+if (fs.existsSync(androidAssets)) fs.rmSync(androidAssets, { recursive: true, force: true });
+
+/* 6) 汇总体积，方便盯预算 */
 function sizeOf(p) {
   const st = fs.statSync(p);
   if (st.isFile()) return st.size;
