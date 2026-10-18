@@ -358,15 +358,20 @@ python -m http.server 8123          # 手机同网络访问 http://<你的电脑
 ```powershell
 cd D:\Ai\Datas\lurecast
 npm install
-npm test          # 等价性测试：新 src/lib/engine.ts 必须与 assets/engine.js 输出完全一致
+npm test          # 48 条单测/等价性测试：engine 与 assets/engine.js 逐项一致，另有 spots/my/update/deeper/window-hint
 npm run build     # 产物在 dist-web/（P0 阶段只编译 engine，P1 起整包构建）
 npm run typecheck # vue-tsc --noEmit
 ```
 
 > **P4 已整站切换**：新壳入口是 `app.html`（`src/main.ts` + Vue 组件），打包后接管 `native/www/index.html`；
-> 出包流程 `npm run sync-web`（= build → 装进 `native/www/`，根 `index.html` 存成 `legacy.html` 作回滚）。
-> 重构前的实现仍在 `assets/*.js`（手写 IIFE），只给 `legacy.html` 回滚用，新开发不要往里加东西。
+> 出包流程 `npm run sync-web`（= build → 装进 `native/www/`）。**默认不再带老壳**（要回滚版就 `node native/sync-web.mjs --with-legacy`，
+> 会额外把根 `index.html` 存成 `legacy.html` 并复制 `assets/`）。
+> 重构前的实现仍在 `assets/*.js`（手写 IIFE），只在带 `--with-legacy` 时随包发布，新开发不要往里加东西。
 > 分阶段记录与验收数据见 `docs/REFACTOR-PLAN.md`。
+>
+> 两个容易踩的点（已修，别改回去）：水族馆的 25 张鱼贴图是运行期拼路径加载的，`vite.config.ts` 里有个
+> `copyFishSprites()` 插件负责在构建收尾把它们复制进 `dist-web/assets/fish/`，删了这个插件 APK 里就只剩矢量兜底鱼；
+> `main.ts` 必须等 `Store.ready` 再挂载，否则首帧读到空的存储镜像（渔获/常用地点像丢了）。
 
 
 - `index.html`：正常打开会让你授权定位

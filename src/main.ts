@@ -12,31 +12,46 @@ import '../assets/app.css'
 import '../assets/icons.js'
 import { initPrefs } from './lib/cfg'
 import { I18N } from './lib/i18n'
+import { Store } from './lib/store'
 
-// 与老壳同序：先读判定口径与外观（CFG/UI），再读界面语言
-initPrefs()
-I18N.load()
-I18N.apply()
+/* 启动顺序：等存储层就绪 → 读偏好 → 挂载。
+   存储层是「内存镜像 + IndexedDB 异步落盘」，getItem 同步读的是镜像，镜像由 readAll 灌入。
+   initPrefs / I18N.load / 我的 / 声呐 / 底图 全是在挂载后同步读 Store，先挂载就会读到空镜像：
+   偏好回默认、渔获与常用地点像丢了，随后任意一次写入还会把真数据覆盖掉。
+   2.5 s 兜底：IndexedDB 被隐私模式或别的页面卡住时不能白屏，照旧用默认值起来。 */
+const BOOT_TIMEOUT = 2500
 
-const app = createApp(App)
-app.use(createPinia())
-app.mount('#app')
+function boot() {
+  // 与老壳同序：先读判定口径与外观（CFG/UI），再读界面语言
+  initPrefs()
+  I18N.load()
+  I18N.apply()
 
-// 挂载后把 [data-icon] 填成 SVG（与 legacy 页面同一套图标）
-const icons = (window as any).Icons
+  const app = createApp(App)
+  app.use(createPinia())
+  app.mount('#app')
 
-// Vue 每次切换页签/弹窗都可能带出新的 [data-icon]：paint() 幂等，重画一次即可
-const paintIcons = () => {
-  const ic = (window as any).Icons
-  if (ic && ic.paint) ic.paint()
+  // 挂载后把 [data-icon] 填成 SVG（与 legacy 页面同一套图标）
+  const icons = (window as any).Icons
+
+  // Vue 每次切换页签/弹窗都可能带出新的 [data-icon]：paint() 幂等，重画一次即可
+  const paintIcons = () => {
+    const ic = (window as any).Icons
+    if (ic && ic.paint) ic.paint()
+  }
+  ;(window as any).__lcPaintIcons = paintIcons
+  if (icons && icons.paint) icons.paint()
+
+  /* Service Worker：只在打包产物里注册（dev 下会缓存 Vite 的模块图，反而碍事）。
+     新 SW 的清单是 install 时从 index.html 里扒的，加资源不用再手改。 */
+  if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => { /* 拿不到离线能力也不影响使用 */ })
+    })
+  }
 }
-;(window as any).__lcPaintIcons = paintIcons
-if (icons && icons.paint) icons.paint()
 
-/* Service Worker：只在打包产物里注册（dev 下会缓存 Vite 的模块图，反而碍事）。
-   新 SW 的清单是 install 时从 index.html 里扒的，加资源不用再手改。 */
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => { /* 拿不到离线能力也不影响使用 */ })
-  })
-}
+let booted = false
+const start = () => { if (!booted) { booted = true; boot() } }
+setTimeout(start, BOOT_TIMEOUT)
+Store.ready.then(start, start)   // Store.ready 是 Promise（不是函数），见 lib/store.ts

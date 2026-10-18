@@ -806,18 +806,21 @@ function unlockedMap() { return unlockedGetter() }
     if (lite || blur > 0.15) {
       ctx.drawImage(img, -L / 2, -H / 2, L, H);
     } else {
-      // 身体一次画完；尾巴 6 段，各自绕前缘旋转 —— 是「摆」不是「平移」
-      var tailFrom = 0.58;
-      var bodyW = img.width * tailFrom;
-      ctx.drawImage(img, 0, 0, bodyW, img.height, -L / 2, -H / 2, L * tailFrom + 0.8, H);
-      var n = 6, sw = (img.width - bodyW) / n, dw = (L * (1 - tailFrom)) / n;
+      /* 25 张贴图实测全是「头在右、尾在左」（见 fishcut 抠图流程），所以摇摆的是图左侧 42%：
+         躯干（含头、眼、嘴）整块画一次不动，尾巴 6 段各自绕「靠躯干那一侧」旋转 —— 是「摆」不是「平移」。
+         早先这段按「头在左」写，结果把头部切片当尾巴摆，嘴边会裂出一道缝（就是这道缝被当成贴图瑕疵）。 */
+      var tailTo = 0.42;
+      var bodyFrom = img.width * tailTo;
+      ctx.drawImage(img, bodyFrom, 0, img.width - bodyFrom, img.height,
+        -L / 2 + L * tailTo - 0.8, -H / 2, L * (1 - tailTo) + 0.8, H);
+      var n = 6, sw = bodyFrom / n, dw = (L * tailTo) / n;
       for (var i = 0; i < n; i++) {
-        var u = (i + 1) / n;
+        var u = (n - i) / n;            // 尾尖那一段 u=1（摆幅最大），贴躯干的一段 u=1/6
         var ang = Math.sin(t * 0.0048 * f.speed + f.phase - u * 2.1) * 0.22 * u * u;
         ctx.save();
-        ctx.translate(-L / 2 + L * tailFrom + i * dw, 0);
+        ctx.translate(-L / 2 + (i + 1) * dw, 0);
         ctx.rotate(ang);
-        ctx.drawImage(img, bodyW + i * sw, 0, sw, img.height, 0, -H / 2, dw + 1, H);
+        ctx.drawImage(img, i * sw, 0, sw, img.height, -dw, -H / 2, dw + 1, H);
         ctx.restore();
       }
     }
