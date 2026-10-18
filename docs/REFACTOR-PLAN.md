@@ -255,7 +255,7 @@ P0 已按此开工并完成，见 §9。
 | 数据层 | `src/stores/my.ts`：常用地点（最多 30，120 m 判重）、渔获（最多 80，照片 480px / q0.72 JPEG）、配额满时丢最老照片重试、档案导出/导入（zip ↔ JSON，按 id 合并） |
 | 常用地点卡 | `CardFav.vue` + `modals/PlaceEditor.vue`：保存当前位置 / 列表（缩略图、距离、时间）/ ✎ 编辑 / × 删除；名称 + 描述 + 最多 6 张图 |
 | 渔获卡 | `CardCatch.vue`：拍照 / 相册 / 导出 / 导入 + 照片墙 + 详情弹窗（鱼种资料、当时天气、OSM 链接）+ 删除确认 |
-| 水族馆卡 | `CardAqua.vue`：**数据侧就位**（已解锁数 / 按习性水层 top·mid·bot 分组 / 尺寸），2.5D canvas 水体留到 P3b |
+| 水族馆 | `src/lib/aqua.ts`（`my.js` 660–1847 行机械迁移，1155 行绘制代码一行未改）+ `CardAqua.vue`：2.5D 透视分层、河床贴图 `bed-lake.webp`、丁达尔光柱、焦散、随水流摆的细草、分层气泡；全屏（`#cardAqua.fs` + `body.aquafs` + ESC 退出）与鱼种图例。DOM 契约沿用老壳（`aquaCanvas/aquaCount/aquaHint/aquaLegend/cardAqua`），`unlockedMap` 改为 my store 注入 |
 
 **修掉的老壳缺陷（有测试钉住）**
 
@@ -267,12 +267,13 @@ P0 已按此开工并完成，见 §9。
 - `npm test` **26 条全绿**（新增 7 条 `src/stores/__tests__/my.test.ts`）：ZIP 往返（含中文与 300 字节二进制逐字节比对）、非 zip 抛错、合并导入（新增/更新/排序）、地点 120 m 判重、空名拒绝。
 - 真实浏览器闭环（Playwright + 系统 Chrome，拿 1×1 PNG 当照片）：保存钓点（默认名「位置 30.250,120.150」→ 改名 → 传图 → 1 张）→ 渔获从相册选 → 25 个鱼种选项 + 3 个智能建议 + 缩略图 → 保存后 `1/25 种已解锁`、水族馆切到「中上层 / 中层」两组 → **导出**得到 4243 字节 zip（magic `PK`，含 manifest/catches/favorites/README）→ 删除记录（回到 0/25）→ **把这个 zip 导入**回到 1/25。全程无 page error；390px 视口三张卡均 370px、无横向溢出。
 
-体积：app JS **193.3 KB（gzip 75.4 KB）** + CSS 72.9 KB，样式仍与老壳同源。
+体积：app JS **218.7 KB（gzip 85.2 KB）** + CSS 72.9 KB（水族馆搬进来 +25 KB；河床贴图 `bed-lake.webp` 74 KB 单独成文件，只在打开「我的」页时才请求）。
+
+**水族馆（P3b）验证**：Playwright 读 canvas 像素——空缸时 2266/抽样点非背景、561 种颜色（水体+河床+光柱已画）；解锁一条大口黑鲈后角标 `1 / 25 种`、空态隐藏、图例 `大口黑鲈`；取两帧指纹不同 → RAF 在跑；全屏画布 1280×888、`body.aquafs` 生效、图例 flex；ESC 退出、切走页签卸载 canvas（RAF 停止）、切回重新开画，全程无 page error；390px 视口 338×178 无溢出。
 
 **P3 没做的（下一轮）**
 
-- 水族馆 canvas 渲染（`my.js` 的 `buildFishes/drawFish/drawScene`，约 1100 行：透视分层、焦散光斑、水草、气泡）。
-- Agent 助手 / 分享弹窗 / 设置弹窗 / i18n（计划在 P4 与影像页一起）。
+- 影像页（Sentinel-2 水面 + 地形卡）、Agent 助手、分享弹窗、设置弹窗、i18n（按计划在 P4）。
 - Deeper 声呐接入（`docs/DEEPER-SONAR.md` 的方案与解析器就绪，还没接进 UI）。
 
 ## 附：现状与目标对照表（验收时贴给用户看的）
