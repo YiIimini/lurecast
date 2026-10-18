@@ -219,8 +219,12 @@ const doc: any = typeof document !== 'undefined' ? document : { addEventListener
   };
 
   // 关页面/切后台时把没落盘的写下去（IndexedDB 事务通常在卸载后仍能完成）
-  win.addEventListener('pagehide', flush);
-  doc.addEventListener('visibilitychange', function () { if (doc.hidden) flush(); });
+  // 关页面/切后台时把没落盘的写下去（IndexedDB 事务通常在卸载后仍能完成）。
+  // 加 typeof 守卫：node 里跑单测时没有 window 的事件系统，不该在这里炸。
+  if (typeof win.addEventListener === 'function') win.addEventListener('pagehide', flush);
+  if (doc && typeof doc.addEventListener === 'function') {
+    doc.addEventListener('visibilitychange', function () { if (doc.hidden) flush(); });
+  }
 
   export const Store = api;
   init();

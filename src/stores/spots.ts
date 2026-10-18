@@ -13,6 +13,7 @@ import { defineStore } from 'pinia'
 import { Engine as E } from '../lib/engine'
 import { Api } from '../lib/api'
 import { useEnvStore } from './env'
+import { toast } from '../lib/ui'
 
 function windToDeg(): number {
   const cur = (useEnvStore().wx as any)?.data?.current
@@ -128,7 +129,7 @@ export const useSpotsStore = defineStore('spots', {
         score: o.spotScore != null ? o.spotScore : null
       }
       this.selSpot = o
-      if (!silent) toastMsg('已设为目标钓点：' + this.navTarget.title)
+      if (!silent) toast('已设为目标钓点：' + this.navTarget.title)
     },
 
     clearNavTarget() {
@@ -138,22 +139,6 @@ export const useSpotsStore = defineStore('spots', {
     }
   }
 })
-
-/* 轻量 toast：老壳用的是同一套内部实现，这里先留一个最小可用的占位，
-   等 P3 把 fx/toast 组件搬过来再换成正式的。 */
-let toastTimer = 0
-export function toastMsg(msg: string) {
-  const w = window as any
-  let el = document.getElementById('lc-toast')
-  if (!el) {
-    el = document.createElement('div')
-    el.id = 'lc-toast'
-    el.className = 'toast'
-    document.body.appendChild(el)
-  }
-  el.textContent = msg
-  el.classList.add('on')
-  clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => el && el.classList.remove('on'), 2200)
-  void w
-}
+/* toast 统一走 lib/ui（P3 把 ui.js 搬过来后，这里只保留一个别名，
+   老调用点不用改；实现、时长与 #toast 节点都与老壳一致）。 */
+export { toast as toastMsg } from '../lib/ui'

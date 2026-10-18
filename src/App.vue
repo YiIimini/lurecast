@@ -8,6 +8,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useEnvStore } from './stores/env'
 import { useSpotsStore } from './stores/spots'
+import { useMyStore } from './stores/my'
 import { useUiStore } from './stores/ui'
 import CardLoc from './components/cards/CardLoc.vue'
 import CardScore from './components/cards/CardScore.vue'
@@ -16,11 +17,15 @@ import CardWeather from './components/cards/CardWeather.vue'
 import CardWind from './components/cards/CardWind.vue'
 import CardWater from './components/cards/CardWater.vue'
 import CardMap from './components/cards/CardMap.vue'
+import CardFav from './components/cards/CardFav.vue'
+import CardCatch from './components/cards/CardCatch.vue'
+import CardAqua from './components/cards/CardAqua.vue'
 import CardSpot from './components/cards/CardSpot.vue'
 import FindWater from './components/modals/FindWater.vue'
 
 const env = useEnvStore()
 const spots = useSpotsStore()
+const my = useMyStore()
 const ui = useUiStore()
 
 const mapRef = ref<any>(null)
@@ -74,6 +79,7 @@ function onFocusSpot(s: any) {
 }
 
 onMounted(() => {
+  my.load()
   const q = new URLSearchParams(location.search)
   const lat = Number(q.get('lat'))
   const lon = Number(q.get('lon'))
@@ -126,14 +132,20 @@ onMounted(() => {
         <CardSpot @focus="onFocusSpot" />
       </template>
 
+      <template v-else-if="ui.tab === 'me'">
+        <CardFav />
+        <CardCatch />
+        <CardAqua />
+      </template>
+
       <section v-else class="card span2 show">
         <div class="card-head">
           <span class="ico"><i class="ic" data-icon="info"></i></span>
-          <h2>{{ ui.tab === 'sat' ? '影像' : '我的' }}</h2>
+          <h2>影像</h2>
         </div>
         <div class="empty">
           <b>这一页还在老壳里</b>
-          <p>{{ ui.tab === 'sat' ? '卫星水面（Sentinel-2）要走 geotiff.js，和影像页一起在 P3 搬。' : '常用地点 / 渔获 / 设置弹窗排在 P3。' }}</p>
+          <p>卫星水面（Sentinel-2）要走 geotiff.js + Copernicus DEM，和地形卡一起在 P4 搬。</p>
           <p>按 strangler 计划，新壳与老壳（<code>index.html</code>）并存，P4 才整站切换。</p>
         </div>
       </section>

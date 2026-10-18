@@ -243,6 +243,38 @@ P0 已按此开工并完成，见 §9。
 
 ---
 
+---
+
+## 12. P3 完成情况（2026-10-18）——「我的」页 + 弹窗体系
+
+| 交付 | 内容 |
+|---|---|
+| 弹窗三件套 | `src/lib/ui.ts`：`alert/confirm/prompt/sheet/toast/close`（由 `assets/ui.js` 机械迁移，Promise 风格不变，DOM class 与老壳一致）。加了 `typeof document` 守卫，纯逻辑单测能在 node 里 import |
+| 鱼种库 | `src/lib/species.ts`：`window.SPECIES_DB` 25 条原样搬成 `export const SPECIES_DB`（脚本转换，数据一字未改），补 `Species` 类型与 `speciesById()` |
+| ZIP | `src/lib/zip.ts`：手写 stored ZIP（crc32 + local header + central directory）从 `my.js` 搬到 lib，纯函数、可在 node 直接测 |
+| 数据层 | `src/stores/my.ts`：常用地点（最多 30，120 m 判重）、渔获（最多 80，照片 480px / q0.72 JPEG）、配额满时丢最老照片重试、档案导出/导入（zip ↔ JSON，按 id 合并） |
+| 常用地点卡 | `CardFav.vue` + `modals/PlaceEditor.vue`：保存当前位置 / 列表（缩略图、距离、时间）/ ✎ 编辑 / × 删除；名称 + 描述 + 最多 6 张图 |
+| 渔获卡 | `CardCatch.vue`：拍照 / 相册 / 导出 / 导入 + 照片墙 + 详情弹窗（鱼种资料、当时天气、OSM 链接）+ 删除确认 |
+| 水族馆卡 | `CardAqua.vue`：**数据侧就位**（已解锁数 / 按习性水层 top·mid·bot 分组 / 尺寸），2.5D canvas 水体留到 P3b |
+
+**修掉的老壳缺陷（有测试钉住）**
+
+- 档案「合并导入」时老壳写的是 `byId[r.id] = r`，只改了索引表、没换掉 `cur` 里的记录 —— 于是「更新 N 条」的数字是假的，内容根本没被覆盖。新实现按索引替换（`cur[i] = r`），测试用「更旧 vs 更新」两条同 id 记录验了两侧行为。
+- `src/lib/store.ts` 在 node 环境（无 window 事件系统）会 `win.addEventListener is not a function`；加了 typeof 守卫，单测可以直接 import 存储层。
+
+**验证**
+
+- `npm test` **26 条全绿**（新增 7 条 `src/stores/__tests__/my.test.ts`）：ZIP 往返（含中文与 300 字节二进制逐字节比对）、非 zip 抛错、合并导入（新增/更新/排序）、地点 120 m 判重、空名拒绝。
+- 真实浏览器闭环（Playwright + 系统 Chrome，拿 1×1 PNG 当照片）：保存钓点（默认名「位置 30.250,120.150」→ 改名 → 传图 → 1 张）→ 渔获从相册选 → 25 个鱼种选项 + 3 个智能建议 + 缩略图 → 保存后 `1/25 种已解锁`、水族馆切到「中上层 / 中层」两组 → **导出**得到 4243 字节 zip（magic `PK`，含 manifest/catches/favorites/README）→ 删除记录（回到 0/25）→ **把这个 zip 导入**回到 1/25。全程无 page error；390px 视口三张卡均 370px、无横向溢出。
+
+体积：app JS **193.3 KB（gzip 75.4 KB）** + CSS 72.9 KB，样式仍与老壳同源。
+
+**P3 没做的（下一轮）**
+
+- 水族馆 canvas 渲染（`my.js` 的 `buildFishes/drawFish/drawScene`，约 1100 行：透视分层、焦散光斑、水草、气泡）。
+- Agent 助手 / 分享弹窗 / 设置弹窗 / i18n（计划在 P4 与影像页一起）。
+- Deeper 声呐接入（`docs/DEEPER-SONAR.md` 的方案与解析器就绪，还没接进 UI）。
+
 ## 附：现状与目标对照表（验收时贴给用户看的）
 
 | 指标 | 现在（r29） | 重构后目标 |
