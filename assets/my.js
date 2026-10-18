@@ -44,30 +44,94 @@
   /* ---------------------------------------------------------------- 常用地点 */
   function favList() { return read(KEY_FAV, []); }
 
+  /* ---------------------------------------------------------------- 钓点档案编辑器
+     常用地点不只是坐标：名称、描述、图片（本机压到 480px，只存这台设备）。 */
+  var placeEdit = { idx: -1, lat: 0, lon: 0, photos: [] };
+
+  function defaultPlaceName() {
+    var s = st(), p = s.place || {};
+    return s.placeHint || p.name ||
+      ('位置 ' + (s.me ? s.me.lat.toFixed(3) + ',' + s.me.lon.toFixed(3) : ''));
+  }
+
+  function renderPlacePhotos() {
+    var box = $('placePhotos');
+    if (!box) return;
+    box.innerHTML = placeEdit.photos.map(function (u, i) {
+      return '<div class="placephoto"><img src="' + u + '" alt="">' +
+        '<button data-placephoto="' + i + '" title="删除这张">×</button></div>';
+    }).join('');
+    Array.prototype.forEach.call(box.querySelectorAll('[data-placephoto]'), function (b) {
+      b.addEventListener('click', function () {
+        placeEdit.photos.splice(parseInt(b.getAttribute('data-placephoto'), 10), 1);
+        renderPlacePhotos();
+      });
+    });
+  }
+
+  function addPlacePhotos(files) {
+    var arr = Array.prototype.slice.call(files || []).slice(0, 6);
+    if (!arr.length) return;
+    Promise.all(arr.map(compressImage)).then(function (urls) {
+      placeEdit.photos = placeEdit.photos.concat(urls).slice(0, 6);
+      renderPlacePhotos();
+    }).catch(function (e) {
+      UI.alert('图片处理失败：' + e.message, { title: '图片' });
+    });
+  }
+
+  function openPlaceEditor(opts) {
+    opts = opts || {};
+    var list = favList();
+    var fav = (typeof opts.idx === 'number' && opts.idx >= 0) ? list[opts.idx] : null;
+    var s = st();
+    placeEdit.idx = fav ? opts.idx : -1;
+    placeEdit.lat = fav ? fav.lat : (opts.lat != null ? opts.lat : (s.me ? s.me.lat : 0));
+    placeEdit.lon = fav ? fav.lon : (opts.lon != null ? opts.lon : (s.me ? s.me.lon : 0));
+    placeEdit.photos = fav && fav.photos ? fav.photos.slice(0, 6) : [];
+    if ($('placeName')) $('placeName').value = fav ? fav.name : (opts.name || defaultPlaceName());
+    if ($('placeDesc')) $('placeDesc').value = fav ? (fav.desc || '') : (opts.desc || '');
+    if ($('placeTitle')) $('placeTitle').textContent = fav ? '编辑钓点' : '保存钓点';
+    if ($('placeCoordHint')) {
+      $('placeCoordHint').textContent = '坐标 ' + placeEdit.lat.toFixed(5) + ', ' + placeEdit.lon.toFixed(5) +
+        ' · WGS-84，名称/描述/图片都只存本机';
+    }
+    renderPlacePhotos();
+    if (window.LureCast && window.LureCast.openModal) window.LureCast.openModal('modalPlace');
+  }
+
+  function savePlace() {
+    var name = ($('placeName') ? $('placeName').value : '').trim();
+    if (!name) { UI.alert('给这个钓点起个名字吧。', { title: '还差个名字' }); return; }
+    var desc = ($('placeDesc') ? $('placeDesc').value : '').trim();
+    var list = favList();
+    if (placeEdit.idx >= 0 && list[placeEdit.idx]) {
+      var f = list[placeEdit.idx];
+      f.name = name.slice(0, 24);
+      f.desc = desc.slice(0, 240);
+      f.photos = placeEdit.photos.slice(0, 6);
+    } else {
+      list.unshift({
+        id: 'f' + Date.now(), name: name.slice(0, 24), desc: desc.slice(0, 240),
+        lat: placeEdit.lat, lon: placeEdit.lon, at: Date.now(), photos: placeEdit.photos.slice(0, 6)
+      });
+    }
+    write(KEY_FAV, list.slice(0, 30));
+    renderFav();
+    renderCatch();
+    if (window.LureCast && window.LureCast.closeModal) window.LureCast.closeModal('modalPlace');
+    UI.toast(placeEdit.idx >= 0 ? '钓点已更新' : '已存为常用地点');
+  }
+
   function saveCurrentPlace() {
     var s = st();
     if (!s.me) { UI.alert('还没有定位：先用 GPS 或「找水域」选一个地方。', { title: '先定位' }); return; }
     var list = favList();
     if (list.some(function (f) { return distM(f, s.me) < 120; })) {
-      UI.alert('这个位置已经存过了（120 米内）。', { title: '重复地点' });
+      UI.alert('这个位置已经存过了（120 米内）。在列表里点「✎」可以补图片和描述。', { title: '重复地点' });
       return;
     }
-    var guess = s.placeHint || (s.place && s.place.name) || ('位置 ' + s.me.lat.toFixed(3) + ',' + s.me.lon.toFixed(3));
-    UI.prompt('给这个钓点起个名字', guess, { title: '存为常用地点', placeholder: '例如：停车场旁石堤' }).then(function (name) {
-      if (name == null) return;
-      return UI.prompt('再写一句特征（可留空）', '', {
-        title: '备注', placeholder: '例如：涨潮能站人，退潮是泥滩', multiline: true, okText: '保存'
-      }).then(function (desc) {
-        if (desc == null) return;
-        list.unshift({
-          id: 'f' + Date.now(), name: (name || guess).slice(0, 24), desc: (desc || '').slice(0, 120),
-          lat: s.me.lat, lon: s.me.lon, at: Date.now(), photos: []
-        });
-        write(KEY_FAV, list.slice(0, 30));
-        renderFav();
-        UI.toast('已存为常用地点');
-      });
-    });
+    openPlaceEditor({ lat: s.me.lat, lon: s.me.lon });
   }
 
   function renderFav() {
@@ -82,16 +146,19 @@
     box.innerHTML = list.map(function (f, i) {
       var d = s.me ? distM(s.me, f) : null;
       var nPhotos = (f.photos || []).length;
+      var thumb = (f.photos && f.photos.length)
+        ? '<span class="favthumb"><img src="' + f.photos[0] + '" alt=""></span>' : '';
       return '<div class="favrow">' +
-        '<button class="favgo" data-fav="' + i + '">' +
+        '<button class="favgo" data-fav="' + i + '">' + thumb +
+        '<span class="favtext">' +
         '<b><span class="favstars">★</span> ' + esc(f.name) + '</b>' +
         (f.desc ? '<em style="color:var(--ink-2)">' + esc(f.desc) + '</em>' : '') +
         '<em>' + f.lat.toFixed(4) + ', ' + f.lon.toFixed(4) +
         (d != null ? ' · 距 ' + (d >= 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d) + ' m') : '') +
         ' · 存于 ' + fmtDate(f.at).slice(5) +
-        (nPhotos ? ' · ' + nPhotos + ' 张图' : '') + '</em></button>' +
+        (nPhotos ? ' · ' + nPhotos + ' 张图' : '') + '</em></span></button>' +
         '<div class="favacts">' +
-        '<button class="favdel" data-favpic="' + i + '" title="加图片">＋</button>' +
+        '<button class="favdel" data-favedit="' + i + '" title="编辑名称/描述/图片">✎</button>' +
         '<button class="favdel" data-favdel="' + i + '" title="删除">×</button>' +
         '</div></div>';
     }).join('');
@@ -101,27 +168,10 @@
         if (f && window.LureCast) window.LureCast.setMe(f.lat, f.lon, null, f.name, 'fav');
       });
     });
-    Array.prototype.forEach.call(box.querySelectorAll('[data-favpic]'), function (b) {
-      b.addEventListener('click', function () {
-        var idx = parseInt(b.getAttribute('data-favpic'), 10);
-        var inp = document.createElement('input');
-        inp.type = 'file';
-        inp.accept = 'image/*';
-        inp.multiple = true;
-        inp.onchange = function () {
-          var files = Array.prototype.slice.call(inp.files || []).slice(0, 6);
-          if (!files.length) return;
-          var list2 = favList();
-          var fav = list2[idx];
-          if (!fav) return;
-          fav.photos = fav.photos || [];
-          Promise.all(files.map(compressImage)).then(function (urls) {
-            fav.photos = fav.photos.concat(urls).slice(0, 12);
-            write(KEY_FAV, list2);
-            renderFav();
-          });
-        };
-        inp.click();
+    Array.prototype.forEach.call(box.querySelectorAll('[data-favedit]'), function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        openPlaceEditor({ idx: parseInt(b.getAttribute('data-favedit'), 10) });
       });
     });
     Array.prototype.forEach.call(box.querySelectorAll('[data-favdel]'), function (b) {
@@ -1701,7 +1751,21 @@
     });
   }
 
+  function bindPlaceInput(el) {
+    if (!el) return;
+    el.addEventListener('change', function () {
+      addPlacePhotos(el.files);
+      el.value = '';
+    });
+  }
+
   function init() {
+    // 钓点档案编辑器
+    if ($('btnPlaceSave')) $('btnPlaceSave').addEventListener('click', savePlace);
+    if ($('btnPlaceAlbum')) $('btnPlaceAlbum').addEventListener('click', function () { if ($('placeAlbumInput')) $('placeAlbumInput').click(); });
+    if ($('btnPlaceCamera')) $('btnPlaceCamera').addEventListener('click', function () { if ($('placeCameraInput')) $('placeCameraInput').click(); });
+    bindPlaceInput($('placeAlbumInput'));
+    bindPlaceInput($('placeCameraInput'));
     // 拍照走 capture input（直接起相机）；选图走普通 input（系统给出相册/文件选择）
     bindPhotoInput($('catchCamera'));
     bindPhotoInput($('catchInput'));
@@ -1747,7 +1811,6 @@
     saveCurrentPlace: saveCurrentPlace,
     catches: catches, favorites: favList, unlocked: function () { return Object.keys(unlockedMap()); },
     openCatchDetail: openCatchDetail, renderFav: renderFav,
-    buildArchive: buildArchive, importArchive: importArchive, exportArchive: exportArchive,
-    zipBuild: zipBuild, zipRead: zipRead, readArchiveBuffer: readArchiveBuffer
+    openPlaceEditor: openPlaceEditor, savePlace: savePlace,
   };
 })();

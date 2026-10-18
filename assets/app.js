@@ -42,14 +42,14 @@
 
   /* 构建标记：每次发版改这里。页面上能看到它，一眼就能判断「我现在看的是不是旧版」。
      index.html 里资源 URL 上的 ?v= 要同步改，否则 Service Worker 会继续喂旧 JS/CSS。 */
- var BUILD = '2026-10-20 · r26';
+ var BUILD = '2026-10-20 · r27';
   var S = {
     me: null, place: null, tzOffset: 0,
     wx: null, sea: null, flood: null, osm: null,
     bodies: [], cands: [], spots: [], terrain: null,
     env: null, curve: [], windows: [], water: null,
     waterAuto: 'unknown', waterType: 'auto', species: 'general',
-    stale: false, loading: false, selSpot: null,
+    stale: false, loading: false, selSpot: null, navTarget: null, pickCb: null,
     map: null, layers: null, error: null,
     sat: null, satMode: 'sdb', satBusy: false, satZoom: 0.9, tab: 'summary',
     locToken: 0, reqGen: 0, locSource: null
@@ -843,6 +843,8 @@
         '<span class="spot-tags">' + tags + '</span>' +
         '<span class="spot-why">' + esc(s.reasons.join('；')) + '</span>' +
         '<span class="spot-why">建议拟饵：' + esc(s.lure.join(' / ')) + '</span>' +
+        (S.navTarget && Math.abs(S.navTarget.lat - s.lat) < 1e-6 && Math.abs(S.navTarget.lon - s.lon) < 1e-6
+          ? '<span class="spot-nav on">目标钓点</span>' : '<span class="spot-nav">设为目标</span>') +
         '<span class="spot-side"><b>' + s.spotScore + '</b><em>分</em></span>' +
         '</button>';
     }).join('');
@@ -850,9 +852,22 @@
     Array.prototype.forEach.call(box.querySelectorAll('[data-spot]'), function (b) {
       b.addEventListener('click', function () {
         var sel = S.spots[parseInt(b.getAttribute('data-spot'), 10)];
-        S.selSpot = sel;
+        if (!sel) return;
+        var isSame = S.navTarget && Math.abs(S.navTarget.lat - sel.lat) < 1e-6 && Math.abs(S.navTarget.lon - sel.lon) < 1e-6;
+        if (isSame) {
+          S.navTarget = null;
+          renderSpots();
+          toast('已取消目标钓点，导航回到当前位置');
+          return;
+        }
+        S.navTarget = {
+          lat: sel.lat, lon: sel.lon,
+          title: sel.title || sel.name || '目标钓点',
+          score: sel.spotScore != null ? sel.spotScore : null
+        };
         renderSpots();
         focusSpot(sel);
+        toast('已设为目标钓点：' + S.navTarget.title);
       });
     });
   }
@@ -1521,6 +1536,14 @@
     /* 点地图任意位置 → 直接把那儿当成当前位置（不用先开「找水域」再手填经纬度） */
     S.map.on('click', function (e) {
       var ll = e.latlng;
+      // 「在地图上选点」：这一次点击只把坐标写回手动选点表单，不改当前位置
+      if (S.pickCb) {
+        var pick = S.pickCb;
+        S.pickCb = null;
+        S.map.getContainer().style.cursor = '';
+        pick(ll.lat, ll.lng);
+        return;
+      }
       var t = function (k, f) { return window.I18N ? I18N.t(k) : f; };
       var pop = window.L.popup({ closeButton: true, className: 'locpick', offset: [0, -6] })
         .setLatLng(ll)
@@ -1624,6 +1647,7 @@
     if (!S.me) return;
     if (S.tab !== 'spots' && !S.map) return;
     if (!initMap() && !S.map) return;
+    if (!S.layers) return;          // 地图还没建好（切页比初始化快）就先不动图层
     var L = window.L;
     S.layers.me.clearLayers(); S.layers.cands.clearLayers();
     S.layers.spots.clearLayers(); S.layers.water.clearLayers();
@@ -1661,9 +1685,9 @@
       var m = L.circleMarker([s.lat, s.lon], {
         radius: 8, color: color, weight: 2, fillColor: color, fillOpacity: .35
       }).bindPopup('<b>' + esc(s.name || '钓点') + ' ' + s.spotScore + ' 分</b><br>' +
-        esc(s.tags.map(function (t) { return t.txt; }).join(' · ')) + '<br>' + esc(s.reasons.join('；')));
-      m.on('click', function () { S.selSpot = s; renderSpots(); });
-      m.addTo(S.layers.spots);
+        esc(s.tags.map(function (t) { return t.txt; }).join(' · ')) + '<br>' + esc(s.reasons.join('；')) +
+        '<br><span style="color:#a5e05f">点这里 = 设为目标钓点</span>');
+      m.on('click', function () { setNavTarget(s); });
     });
 
     drawSatLayer();
@@ -1679,6 +1703,38 @@
     if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+
+  /* ------------------------------------------------ 目标钓点（导航目的地）
+     点地图上的绿点 / 点卡片，就把那个点设成「目标钓点」；分享与导航一律去这里。
+     没设目标时仍然按当前位置（老行为）。 */
+  function setNavTarget(o, silent) {
+    if (!o) { S.navTarget = null; return; }
+    S.navTarget = {
+      lat: o.lat, lon: o.lon,
+      title: o.title || o.name || '目标钓点',
+      score: o.spotScore != null ? o.spotScore : null
+    };
+    S.selSpot = o;
+    if (S.map) drawRoutes();
+    renderSpots();
+    if (!silent) toast('已设为目标钓点：' + S.navTarget.title);
+  }
+
+  function clearNavTarget() {
+    if (!S.navTarget) return false;
+    S.navTarget = null;
+    if ($('shareTargetLine')) $('shareTargetLine').textContent = '';
+    return true;
+  }
+
+  /* 导航/分享用的目标点：有目标钓点就用它，否则用当前位置 */
+  function targetPoint() {
+    if (S.navTarget) {
+      return { lat: S.navTarget.lat, lon: S.navTarget.lon, label: S.navTarget.title, isSpot: true };
+    }
+    if (!S.me) return null;
+    return { lat: S.me.lat, lon: S.me.lon, label: placeLabel(), isSpot: false };
+  }
   function fitAll() {
     if (!S.map) initMap();
     if (!S.map || !S.me) return;
@@ -2395,11 +2451,21 @@
         if (q.length < 1) { if (results) results.innerHTML = ''; return; }
         tmr = setTimeout(doSearch, 700);   // Nominatim 使用政策：别高频
       });
-      input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { clearTimeout(tmr); doSearch(); }
-      });
     }
-
+    if ($('btnPickOnMap')) $('btnPickOnMap').addEventListener('click', function () {
+      // 先挂好「下一次点击取点」，再切页，避免切页异常时选点模式没进
+      S.pickCb = function (lat, lon) {
+        if ($('latInput')) $('latInput').value = lat.toFixed(5);
+        if ($('lonInput')) $('lonInput').value = lon.toFixed(5);
+        openModal('modalManual');
+        toast('已取点 ' + lat.toFixed(4) + ', ' + lon.toFixed(4) + '，点「用这个坐标」生效');
+      };
+      closeModal('modalManual');
+      applyTab('spots');
+      if (!S.map) initMap();
+      if (S.map) S.map.getContainer().style.cursor = 'crosshair';
+      toast('在地图上点一下，取那个点的坐标');
+    });
     var useBtn = $('btnUseCoord');
     if (useBtn) {
       useBtn.addEventListener('click', function () {
@@ -2666,10 +2732,9 @@
     applyTabNames: applyTabNames, renderAll: renderAll, drawMap: drawMap, drawRoutes: drawRoutes,
     mapFull: mapFull, applyTab: applyTab, openModal: openModal, closeModal: closeModal, toast: toast,
     setWaterType: setWaterType, setSpecies: setSpecies, openShareModal: openShareModal,
-    renderSearchHistory: renderSearchHistory
+    renderSearchHistory: renderSearchHistory,
+    setNavTarget: setNavTarget, clearNavTarget: clearNavTarget, targetPoint: targetPoint,
   };
-
-  /* ------------------------------------------------ 分享 / 外部导航 */
   var toastTimer = 0;
   function toast(msg) {
     var el = $('toast');
@@ -2687,33 +2752,41 @@
   }
 
   function openShareModal() {
-    if (!S.me) { toast('还没有坐标，先定位或点地图选点'); return; }
-    if ($('shareLatLon')) {
-      $('shareLatLon').textContent = S.me.lat.toFixed(5) + ', ' + S.me.lon.toFixed(5);
+    var tp = targetPoint();
+    if (!tp) { toast('还没有坐标，先定位或点地图选点'); return; }
+    if ($('shareLatLon')) $('shareLatLon').textContent = tp.lat.toFixed(5) + ', ' + tp.lon.toFixed(5);
+    if ($('shareTargetLine')) {
+      $('shareTargetLine').textContent = tp.isSpot
+        ? '目标钓点：' + tp.label + '（点地图上的绿点可换目标）'
+        : '当前位置：' + tp.label;
     }
+    if ($('shareTitle')) $('shareTitle').textContent = tp.isSpot ? '导航到目标钓点' : '分享与导航';
     openModal('modalShare');
   }
 
   function shareNav(kind) {
-    if (!S.me || !window.CoShare) return;
+    var tp = targetPoint();
+    if (!tp || !window.CoShare) return;
     var r = kind === 'amap'
-      ? CoShare.navAmap(S.me.lat, S.me.lon, placeLabel())
-      : CoShare.navBaidu(S.me.lat, S.me.lon, placeLabel());
+      ? CoShare.navAmap(tp.lat, tp.lon, tp.label)
+      : CoShare.navBaidu(tp.lat, tp.lon, tp.label);
     if (r === 'web') toast('已打开网页版地图，选「到这里去」即可导航');
   }
 
   function shareCoordText() {
-    if (!S.me || !window.CoShare) return;
-    var g = CoShare.gcj02(S.me.lat, S.me.lon);
-    var text = S.me.lat.toFixed(5) + ', ' + S.me.lon.toFixed(5) +
+    var tp = targetPoint();
+    if (!tp || !window.CoShare) return;
+    var g = CoShare.gcj02(tp.lat, tp.lon);
+    var text = tp.label + '\n' + tp.lat.toFixed(5) + ', ' + tp.lon.toFixed(5) +
       '\n高德 ' + g.lat.toFixed(5) + ', ' + g.lon.toFixed(5) +
-      '\n' + CoShare.amapMarker(S.me.lat, S.me.lon, placeLabel());
+      '\n' + CoShare.amapMarker(tp.lat, tp.lon, tp.label);
     CoShare.copy(text).then(function () { toast('坐标已复制，粘贴到聊天里即可'); });
   }
 
   function shareToApps() {
-    if (!S.me || !window.CoShare) return;
-    CoShare.share(S.me.lat, S.me.lon, placeLabel()).then(function (r) {
+    var tp = targetPoint();
+    if (!tp || !window.CoShare) return;
+    CoShare.share(tp.lat, tp.lon, tp.label).then(function (r) {
       if (r === 'copy') toast('这台设备没有分享面板，坐标已复制');
       else if (r === 'cancel') toast('已取消分享');
     });
