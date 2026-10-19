@@ -71,4 +71,4 @@ Vue 3 + Vite + TypeScript + Pinia 重写的新壳（入口 `app.html`，源码 `
 
 ## 许可
 
-[MIT](LICENSE)。地图与影像数据仍归各自来源（© OpenStreetMap contributors、© ESA Sentinel-2、Open-Meteo），使用请遵守上游条款。
+[MIT](LICENSE)。地图与影像数据仍归各自上游：© OpenStreetMap contributors（ODbL）、© ESA Sentinel-2 / Element84 earth-search、Open-Meteo、Copernicus DEM —— 使用时请一并遵守这些数据源的条款与限流要求。
