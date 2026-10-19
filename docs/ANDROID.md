@@ -1,22 +1,22 @@
 # 打进安卓：Capacitor 壳 → APK
 
-**已产出可安装的 APK**：`dist/LureCast-1.4-debug.apk`（5.82 MB，versionCode 5 / versionName 1.4 / BUILD r33，Android Debug 签名，可直接侧载）
+**已产出可安装的 APK**：`dist/LureCast-1.5-debug.apk`（5.88 MB，versionCode 6 / versionName 1.5 / BUILD r34，Android Debug 签名，可直接侧载）
 
 | 项 | 值 |
 |---|---|
 | 包名 | `com.lurecast.app` |
-| 版本 | 1.0（versionCode 1） |
+| 版本 | 1.5（versionCode 6） |
 | minSdk / targetSdk / compileSdk | 22 / 34 / 34 |
 | 应用名 | LureCast 路亚潮汐 |
 | 权限 | INTERNET、ACCESS_FINE_LOCATION、ACCESS_COARSE_LOCATION |
 | 签名 | `CN=Android Debug`（SHA-256 `589b74ac…3016ab`） |
-| 内容 | 550 个条目，前端全部打包（index.html 21.9 KB、app.js 87 KB、sat.js、ai.js、my.js、species.js、geotiff 310 KB） |
+| 内容 | 前端全量打包（index.html + app.js / sat.js / ai.js / my.js / species.js + three.js 675 KB + geotiff 310 KB + 25 张鱼贴图） |
 
 ## 怎么装
 
 1. 手机开「未知来源 / 安装未知应用」许可
-2. 把 `dist/LureCast-1.0-debug.apk` 传到手机点安装
-   或电脑连着手机：`adb install -r dist\LureCast-1.0-debug.apk`
+2. 把 `dist/LureCast-1.5-debug.apk` 传到手机点安装
+   或电脑连着手机：`adb install -r dist\LureCast-1.5-debug.apk`
 3. 首次打开会请求**定位权限**（选「精确位置」）；拍照时会请求相机/相册
 
 > debug 签名只适合自己用。要上架或长期安装，用 Android Studio 的
