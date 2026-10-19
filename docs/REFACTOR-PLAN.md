@@ -599,6 +599,25 @@ Gemini → `…/v1beta` + `gemini-2.0-flash`；填完 key 重载仍在（配合 
 - 导出档案：zip 内 `manifest.json / settings.json / catches.json / favorites.json / README.txt`，
   `settings.json` 里 `map.key` 正确，README 写明恢复方式。
 
+## 22. 水族馆锯齿：把抗锯齿补齐（2026-10-19）
+
+用户反馈「鱼有锯齿感」。三条原因叠在一起：
+
+1. **渲染分辨率被压到 1.5×**：`setPixelRatio(Math.min(1.5, dpr))`。手机 DPR 普遍 2.6–3，
+   压到 1.5 等于把鱼画小一半再放大 —— 斜边全是台阶。改成最高 **2×**（性能优先仍 1×）。
+2. **贴图没开 mipmap**：鱼贴图只设了 `anisotropy = 4`，`minFilter` 还是默认线性单级采样，
+   鱼鳞与轮廓在缩小采样时闪烁；底景照片同样。现在两张都开 `LinearMipmapLinearFilter` + 8× 各向异性。
+3. **硬 `discard` 裁边**：片元里 `if (t.a < 0.10) discard`，低于 0.10 的 alpha 一刀切掉，
+   边缘就是二值 —— 再怎么 MSAA 也平滑不了混合边。改成 0.02 才丢，并把 alpha 坡道放平
+   （`smoothstep(0.02, 0.30)`）；软边采样从 5 tap 加到 **9 tap**（中心 + 四向 + 四对角），半径随距离放大。
+
+另外加了**自适应分辨率**：每约 1 秒看平均帧率，低于 45 fps 就把 DPR 降 0.4（2 → 1.6 → 1.5 地板），
+只在非「性能优先」时降 —— 弱机宁可略软也不掉帧。
+
+**实测**（生产构建 + Chrome + swiftshader，430×950）：
+`deviceScaleFactor=2` 时 canvas 初始 `860×1900`（正好 2×）并截图；同一帧里鱼轮廓是渐变而非台阶。
+软件渲染帧率不足会让自适应降到 `688×1520`（1.6×）—— 说明降档逻辑在工作；真机 GPU 一般停在 2×。
+
 ## 附：现状与目标对照表（验收时贴给用户看的）
 
 | 指标 | 现在（r29） | 重构后目标 |

@@ -9,7 +9,7 @@ import { Store } from './store'
 import { alertBox, confirmBox, toast } from './ui'
 
 const UPDATE_KEY = 'lc:update'
-const BUILD = '2026-10-19 · r37'
+const BUILD = '2026-10-19 · r38'
 
 export function currentBuild(): string { return BUILD }
 
@@ -97,4 +97,5 @@ export async function checkUpdate(onState?: (t: string) => void): Promise<void> 
   toast('正在打开下载…')
   window.location.href = res.apk   // 原生壳里 Capacitor 会交给系统浏览器
 }
+
 

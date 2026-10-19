@@ -97,20 +97,28 @@ uniform float uOpacity, uFogDensity, uDepthTint, uLight, uBlur;
 varying vec2 vUv;
 varying float vDepth;
 
+/* 抗锯齿采样：中心 + 四向 + 四对角（9 tap）。5 tap 时边缘还是阶梯，鱼越大越明显；
+   半径随 uBlur 放大，越远的鱼越软。注意 discard 阈值要压到很低 —— 硬砍在 0.10 就是锯齿的来源。 */
 vec4 sampleSoft(vec2 uv) {
   if (uBlur < 0.01) return texture2D(uMap, uv);
-  vec2 e = vec2(uBlur * 0.0016, uBlur * 0.0024);      // 5 tap：中心 + 四向，远处鱼边缘不再一刀切
-  vec4 a = texture2D(uMap, uv);
-  vec4 b = texture2D(uMap, uv + vec2(e.x, 0.0));
-  vec4 c2 = texture2D(uMap, uv - vec2(e.x, 0.0));
-  vec4 d2 = texture2D(uMap, uv + vec2(0.0, e.y));
-  vec4 f2 = texture2D(uMap, uv - vec2(0.0, e.y));
-  return (a * 2.0 + b + c2 + d2 + f2) / 6.0;
+  vec2 e = vec2(uBlur * 0.0022, uBlur * 0.0032);
+  vec2 g = e * 0.7071;
+  vec4 s = texture2D(uMap, uv) * 4.0;
+  s += texture2D(uMap, uv + vec2(e.x, 0.0));
+  s += texture2D(uMap, uv - vec2(e.x, 0.0));
+  s += texture2D(uMap, uv + vec2(0.0, e.y));
+  s += texture2D(uMap, uv - vec2(0.0, e.y));
+  s += texture2D(uMap, uv + g) * 0.5;
+  s += texture2D(uMap, uv - g) * 0.5;
+  s += texture2D(uMap, uv + vec2(g.x, -g.y)) * 0.5;
+  s += texture2D(uMap, uv + vec2(-g.x, g.y)) * 0.5;
+  return s / 8.0;
 }
 
 void main() {
   vec4 t = sampleSoft(vUv);
-  if (t.a < 0.10) discard;
+  /* 只在「几乎全透明」处丢弃（0.02），剩下的交给 alpha 渐变去抗锯齿 */
+  if (t.a < 0.02) discard;
   vec3 c = t.rgb;
   // 水下照明：整条鱼不再全亮，暗部压一点，亮鳞留着
   c = mix(c * 0.66, c, 0.82 + 0.18 * vUv.y) * uLight;
@@ -121,7 +129,7 @@ void main() {
   float g = dot(c, vec3(0.299, 0.587, 0.114));
   c = mix(c, vec3(g) * vec3(0.88, 0.99, 1.02), uDepthTint * 0.5);
   // 软边：alpha 过一道平滑，贴纸感来自硬边
-  float a = smoothstep(0.10, 0.42, t.a) * uOpacity;
+  float a = smoothstep(0.02, 0.30, t.a) * uOpacity;
   gl_FragColor = vec4(c, a);
 }`
 
@@ -181,7 +189,12 @@ export async function createAqua3D(canvas, opts = {}) {
   /* ------------------------------------------------ 底景（实景照片，cover 铺满） */
   const bgTex = new T.TextureLoader().load(bgUrl)
   if ('colorSpace' in bgTex) bgTex.colorSpace = T.SRGBColorSpace
-  bgTex.minFilter = T.LinearFilter
+  /* mipmap + 各向异性：底片是 720² 的方形照片，铺满竖屏时是放大/裁切，
+     不开 mipmap 的话水草和沙纹会闪（也是「锯齿」观感的一部分） */
+  bgTex.generateMipmaps = true
+  bgTex.minFilter = T.LinearMipmapLinearFilter
+  bgTex.magFilter = T.LinearFilter
+  bgTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
   const bgUniforms = {
     uMap: { value: bgTex },
     uTime: { value: 0 },
@@ -339,9 +352,14 @@ export async function createAqua3D(canvas, opts = {}) {
   const texCache = new Map()
   function fishTex(id) {
     if (!texCache.has(id)) {
+      /* 鱼贴图：开 mipmap + 满级各向异性。原来只设了 anisotropy=4 没管 minFilter，
+         缩小时按线性单级采样 → 鱼鳞与轮廓出现闪烁的锯齿 */
       const t = texLoader.load('assets/fish/' + id + '.webp')
       if ('colorSpace' in t) t.colorSpace = T.SRGBColorSpace
-      t.anisotropy = 4
+      t.generateMipmaps = true
+      t.minFilter = T.LinearMipmapLinearFilter
+      t.magFilter = T.LinearFilter
+      t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
       texCache.set(id, t)
     }
     return texCache.get(id)
@@ -461,8 +479,15 @@ export async function createAqua3D(canvas, opts = {}) {
   let last = 0
   const t0 = performance.now()
 
+  /* 抗锯齿：手机上把 DPR 拉满（1.5 会把鱼边缘切成台阶）；性能优先时退回 1。
+     帧率撑不住时再自动降一档（见 frame 里的自适应），保证低端机不卡。 */
+  let dprCap = perf ? 1 : Math.min(2, window.devicePixelRatio || 1)
+  let fpsSum = 0
+  let fpsN = 0
+
   function applyPerf() {
-    renderer.setPixelRatio(perf ? 1 : Math.min(1.5, window.devicePixelRatio || 1))
+    dprCap = perf ? 1 : Math.min(2, window.devicePixelRatio || 1)
+    renderer.setPixelRatio(dprCap)
     shafts.visible = !perf
     bubbles.visible = !perf
     motes.visible = !perf
@@ -477,6 +502,22 @@ export async function createAqua3D(canvas, opts = {}) {
     const t = (now - t0) / 1000
     const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016)
     last = now
+
+    /* 自适应分辨率：每 ~1 s 看一次平均帧率，低于 45 就把 DPR 降 0.4（2 → 1.6 → 1.25 → 1），
+       只在不是「性能优先」时降；宁可略软也不掉帧。 */
+    fpsSum += 1 / Math.max(0.001, dt)
+    fpsN++
+    if (fpsN >= 60) {
+      const fps = fpsSum / fpsN
+      fpsSum = 0
+      fpsN = 0
+      if (!perf && fps < 45 && dprCap > 1.51) {
+        dprCap = Math.max(1.5, dprCap - 0.4)     // 地板 1.5：再低就回到老版本的糊边
+        renderer.setPixelRatio(dprCap)
+        resize()
+        console.info('[aqua] 帧率 ' + Math.round(fps) + 'fps，分辨率降到 DPR ' + dprCap.toFixed(2))
+      }
+    }
 
     /* 相机：贴着水底慢慢漂 + 一点滚转，像手持而不是三脚架 */
     const camX = Math.sin(t * 0.073) * 0.16
