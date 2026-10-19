@@ -62,7 +62,7 @@ async function doClear() {
 
     <div v-if="!sonar.has" class="empty">
       <b>还没有声呐数据</b>
-      <p>把 Deeper 导出的 CSV 导入进来，就能看到**实测**水深分布（不是按岸坡外推的估值）。
+      <p>把 Deeper 导出的 CSV 导入进来，就能看到<b>实测</b>水深分布（不是按岸坡外推的估值）。
         支持 Quest/PRO 的 <code>bathymetry.csv</code>（无表头 4/5 列）和手机 App 的 <code>scan_data_*.csv</code>（带表头）。</p>
       <p>文件只在本机解析，不上传；解析结果存在本机，下次打开还在。</p>
       <div class="chiprow" style="margin-top:6px">

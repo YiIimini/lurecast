@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { PATTERNS, PHRASES } from '../i18n-phrases'
 
@@ -52,5 +53,20 @@ describe('i18n 文案对照表', () => {
       expect(PATTERNS[i], 'PATTERNS[' + i + '] 不存在').toBeTruthy()
       expect(PATTERNS[i][0].test(s), PATTERNS[i][0].source + ' 匹配不上 ' + s).toBe(true)
     })
+  })
+
+  /* 覆盖度守卫：抓下来的每一条可见中文都必须能翻出来（否则界面上会残留中文）。
+     数据来自 tools/i18n/visible.json 的快照 —— 正是生成对照表的输入，两边同源。 */
+  it('visible.json 里的每条可见文案都能命中对照表或动态模板', () => {
+    const raw = readFileSync(new URL('../../../tools/i18n/visible.json', import.meta.url), 'utf8')
+    const vis = JSON.parse(raw) as { texts: string[]; phrases: string[]; attrs: string[] }
+    const keys = new Set<string>([...vis.texts, ...vis.attrs, ...vis.phrases])
+    const uncovered: string[] = []
+    keys.forEach((k) => {
+      if (PHRASES[k]) return
+      if (PATTERNS.some(([re]) => re.test(k))) return
+      uncovered.push(k)
+    })
+    expect(uncovered).toEqual([])
   })
 })

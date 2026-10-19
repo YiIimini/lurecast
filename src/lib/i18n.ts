@@ -177,6 +177,41 @@ import { PHRASES, PATTERNS } from './i18n-phrases'
       el.setAttribute(a, out);
     }
   }
+  /* 被 <b>/<code> 切开的句子：单个文本节点只是半句，只能按「整个元素的 textContent」匹配。
+     命中后整块换成一句译文（内部标签会被抹掉，视觉上少点强调，但句子是完整的），
+     原文的 innerHTML 存在 WeakMap 里，切回简体时还原。 */
+  var INLINE_TAGS: any = { B: 1, I: 1, EM: 1, STRONG: 1, CODE: 1, SPAN: 1, A: 1, SMALL: 1, SUP: 1, SUB: 1, U: 1, BR: 1 };
+  var ORIG_BLOCK = new WeakMap();
+
+  function onlyInline(el) {
+    for (var n = el.firstChild; n; n = n.nextSibling) {
+      if (n.nodeType === 1 && !INLINE_TAGS[n.tagName]) return false;
+    }
+    return true;
+  }
+
+  function hasElementChild(el) {
+    for (var n = el.firstChild; n; n = n.nextSibling) if (n.nodeType === 1) return true;
+    return false;
+  }
+
+  function trBlock(el, which) {
+    var rec: any = ORIG_BLOCK.get(el);
+    if (which === -1) {
+      if (rec && el.innerHTML !== rec.html) el.innerHTML = rec.html;
+      return !!rec;
+    }
+    var key = rec ? rec.key : keyOf(el.textContent);
+    if (!key || key.length < 8) return false;
+    var zh = PHRASES[key] ? key : SRC_OF[key];
+    if (!zh) return false;
+    var out = morph(zh, which);
+    if (!out) return false;
+    if (!rec) ORIG_BLOCK.set(el, { html: el.innerHTML, key: zh });
+    if (keyOf(el.textContent) !== out) el.textContent = out;
+    return true;
+  }
+
   function walk(el, which) {
     if (!el) return;
     if (el.nodeType === 3) { trTextNode(el, which); return; }
@@ -185,6 +220,10 @@ import { PHRASES, PATTERNS } from './i18n-phrases'
     if (SKIP_TAGS[el.tagName]) { trAttrs(el, which); return; }
     if (el.hasAttribute && el.hasAttribute('data-i18n-skip')) return;
     trAttrs(el, which);
+    // 整句优先：有内联子标签、或之前整块替换过，就先按整块试一次
+    if (ORIG_BLOCK.has(el) || (hasElementChild(el) && onlyInline(el))) {
+      if (trBlock(el, which)) return;
+    }
     for (var n = el.firstChild; n; n = n.nextSibling) walk(n, which);
   }
 
