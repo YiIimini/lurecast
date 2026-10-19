@@ -1,41 +1,101 @@
 <script setup lang="ts">
-/* LureCast · 「我的水族馆」卡（P3b）—— 对应老壳 #cardAqua / my.js renderAqua()
+/* LureCast · 「我的水族馆」卡 —— 真 3D（three.js）优先，2D 兜底
    ---------------------------------------------------------------------------
-   绘制逻辑一行未改，全部在 src/lib/aqua.ts（由 my.js 660–1847 行机械迁移）：
-   2.5D 透视分层、河床贴图、焦散光斑、随水流摆的细草、分层气泡。
-   这里只负责三件事：
-     · 把已解锁鱼种喂给它（setUnlockedGetter ← my store）；
-     · 组件挂载 = 开始跑帧，卸载 = 停 RAF（老壳按页签切，新壳按组件生命周期）；
-     · 保留老壳那套 DOM id（aquaCanvas/aquaCount/aquaHint/aquaLegend/cardAqua），样式不用动。 */
-import { onBeforeUnmount, onMounted, watch } from 'vue'
+   3D 场景在 src/lib/aqua3d.ts：透视相机 + 指数雾 + 带动态焦散的河床 + 斜射光柱 +
+   上浮气泡 + 摆动细草 + 鱼（顶点着色器摆尾、椭圆巡游、按 water layer 分布）。
+   three.js（675 KB）按需动态加载，不进 app chunk；无 WebGL / 解码失败时回退到
+   src/lib/aqua.ts 原来的 2.5D canvas 画法，功能不降级。
+   这里只负责：把已解锁鱼种喂给它、维护角标/图例/空态、全屏、生命周期。 */
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useMyStore } from '../../stores/my'
-import {
-  setUnlockedGetter, stopAqua, renderAqua, aquaFull, isAquaFull
-} from '../../lib/aqua'
+import { setUnlockedGetter, stopAqua, renderAqua, aquaFull, isAquaFull } from '../../lib/aqua'
+import { SPECIES_DB } from '../../lib/species'
+import { createAqua3D } from '../../lib/aqua3d'
 
 const my = useMyStore()
+const canvasEl = ref<HTMLCanvasElement | null>(null)
+let a3d: any = null
+let using3D = false
 
 setUnlockedGetter(() => my.unlocked)
 
-function toggleFull() { aquaFull(!isAquaFull()) }
+/* 已解锁的鱼种（最多 12 条上水，和 2D 版一致） */
+const unlocked = computed<any[]>(() => {
+  const un: any = my.unlocked || {}
+  return (SPECIES_DB as any[]).filter((s) => un[s.id])
+})
+
+function paintChrome() {
+  const list = unlocked.value
+  const cnt = document.getElementById('aquaCount')
+  if (cnt) cnt.textContent = list.length + ' / ' + SPECIES_DB.length + ' 种'
+  const hint = document.getElementById('aquaHint')
+  if (hint) hint.style.display = list.length ? 'none' : 'flex'
+  const lg = document.getElementById('aquaLegend')
+  if (lg) {
+    lg.innerHTML = list.slice(0, 12).map((s: any) =>
+      '<i><s style="background:' + (s.color || '#8fa3b6') + '"></s>' + s.zh + '</i>').join('')
+  }
+}
+
+async function boot() {
+  paintChrome()
+  const cv = canvasEl.value
+  if (!cv) return
+  try {
+    a3d = await createAqua3D(cv, { perf: document.body.classList.contains('perf') })
+  } catch (e) {
+    a3d = null
+    console.warn('[aqua] 3D 初始化失败，回退 2D：', e)
+  }
+  if (a3d) {
+    using3D = true
+    a3d.setFishes(unlocked.value)
+    a3d.start()
+    return
+  }
+  using3D = false
+  renderAqua()          // 2D 兜底（内部也会写角标/图例/空态）
+}
+
+function toggleFull() {
+  /* 3D 在场时不能走 aquaFull()：那个函数会顺手启动 2D 渲染器（startAqua → resizeAqua），
+     而同一块 canvas 已经有 WebGL 上下文，getContext('2d') 返回 null，直接抛错。
+     CSS 那套（card.fs + body.aquafs）在这里自己切，效果完全一样。 */
+  if (using3D) {
+    const card = document.getElementById('cardAqua')
+    if (!card) return
+    const want = !card.classList.contains('fs')
+    card.classList.toggle('fs', want)
+    document.body.classList.toggle('aquafs', want)
+    requestAnimationFrame(() => a3d?.resize?.())
+    return
+  }
+  aquaFull(!isAquaFull())
+}
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape' && isAquaFull()) aquaFull(false)
+  if (e.key === 'Escape' && isAquaFull()) toggleFull()
 }
 
 onMounted(() => {
-  renderAqua()          // 写角标 + 启动（startAqua 内部会重建鱼/水草/气泡）
+  boot()
   window.addEventListener('keydown', onKey)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
+  if (a3d) { a3d.dispose(); a3d = null }
   stopAqua()
   document.body.classList.remove('aquafs')
 })
 
-/* 解锁/删除渔获后重排：startAqua 会把鱼、图例、空态一起刷一遍 */
-watch(() => my.catches, () => renderAqua())
+/* 解锁/删除渔获后重排 */
+watch(() => my.catches, () => {
+  paintChrome()
+  if (using3D && a3d) a3d.setFishes(unlocked.value)
+  else renderAqua()
+})
 </script>
 
 <template>
@@ -53,7 +113,7 @@ watch(() => my.catches, () => renderAqua())
     </div>
 
     <div class="aqua">
-      <canvas id="aquaCanvas"></canvas>
+      <canvas id="aquaCanvas" ref="canvasEl"></canvas>
       <div class="aqua-hint" id="aquaHint"><b>水族馆还是空的</b><p>拍照存档一条鱼，它就会游进这里。</p></div>
       <div class="aqua-legend" id="aquaLegend"></div>
     </div>

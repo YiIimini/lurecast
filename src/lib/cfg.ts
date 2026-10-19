@@ -68,7 +68,7 @@ export function loadCfg() {
 }
 
 export function saveCfg() {
-  try { Store.setItem('lc:cfg', JSON.stringify(CFG)) } catch { /* 忽略 */ }
+  try { Store.setItem('lc:cfg', JSON.stringify(CFG)); Store.flush() } catch { /* 忽略 */ }
   applyCfg()
 }
 
@@ -90,7 +90,7 @@ export function loadUi() {
 }
 
 export function saveUi() {
-  try { Store.setItem('lc:ui', JSON.stringify(UI)) } catch { /* 忽略 */ }
+  try { Store.setItem('lc:ui', JSON.stringify(UI)); Store.flush() } catch { /* 忽略 */ }
 }
 
 /* 外观：只改 CSS 变量与 body class（与老壳同一套变量名，theme.css/app.css 不用动） */

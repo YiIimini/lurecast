@@ -27,6 +27,10 @@ const doc: any = typeof document !== 'undefined' ? document : { addEventListener
   var backend = 'idb';                // idb | ls | memory
   var migratedCount = 0;              // 本次从 localStorage 搬过来的条目数
   var dirty = Object.create(null);    // 待落盘的键（合并高频写）
+  /* 就绪前写进来的键先攒着：库里已经有同名键就以库为准（否则启动瞬间用默认值把真数据盖掉，
+     这正是「设置保存了、重启又变回去」的根因之一）。 */
+  var pendingWrites = Object.create(null);
+  var loaded = false;                 // 库里已有数据是否已经读进内存镜像
   var flushTimer = 0;
   var readyResolve;
   var ready = new Promise(function (res) { readyResolve = res; });
@@ -135,15 +139,33 @@ const doc: any = typeof document !== 'undefined' ? document : { addEventListener
       return readAll(d).then(function (all) {
         for (var k in all) mem[k] = all[k];
         migrate();
+        loaded = true;
+        applyPending();
         readyResolve(api);
       });
     }).catch(function () { initFallback(); });
+  }
+
+  /* 就绪前攒下的写：库里没有这个键才落盘（库里有就以库为准，绝不覆盖真数据） */
+  function applyPending() {
+    var n = 0;
+    for (var k in pendingWrites) {
+      if (mem[k] === undefined) {
+        mem[k] = pendingWrites[k];
+        if (backend === 'ls') lsSet(k, pendingWrites[k]);
+        else { dirty[k] = pendingWrites[k]; n++; }
+      }
+    }
+    pendingWrites = Object.create(null);
+    if (n) scheduleFlush();
   }
 
   function initFallback() {
     db = null;
     backend = 'ls';
     lsKeys().forEach(function (k) { if (k.slice(0, 3) === 'lc:') { var v = lsGet(k); if (v != null) mem[k] = v; } });
+    loaded = true;
+    applyPending();
     readyResolve(api);
   }
 
@@ -160,6 +182,7 @@ const doc: any = typeof document !== 'undefined' ? document : { addEventListener
       v = String(v);
       mem[k] = v;
       if (backend === 'ls') { lsSet(k, v); return true; }
+      if (!loaded) { pendingWrites[k] = v; return true; }   // 就绪前先攒着（见 applyPending）
       dirty[k] = v;
       scheduleFlush();
       return true;
@@ -167,9 +190,12 @@ const doc: any = typeof document !== 'undefined' ? document : { addEventListener
     removeItem: function (k) {
       delete mem[k];
       if (backend === 'ls') { lsDel(k); return; }
+      if (!loaded) { delete pendingWrites[k]; return; }
       dirty[k] = null;
       scheduleFlush();
     },
+    /* 库里已有的数据是否已经读进内存镜像（false 时别急着把默认值写进去） */
+    get loaded() { return loaded; },
     key: function (i) { return Object.keys(mem)[i] || null; },
     get length() { return Object.keys(mem).length; },
     keys: function (prefix) {

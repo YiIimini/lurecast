@@ -1,6 +1,6 @@
 # 打进安卓：Capacitor 壳 → APK
 
-**已产出可安装的 APK**：`dist/LureCast-1.0-debug.apk`（4.33 MB，Android Debug 签名，可直接侧载）
+**已产出可安装的 APK**：`dist/LureCast-1.4-debug.apk`（5.82 MB，versionCode 5 / versionName 1.4 / BUILD r33，Android Debug 签名，可直接侧载）
 
 | 项 | 值 |
 |---|---|

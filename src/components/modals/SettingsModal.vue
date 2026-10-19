@@ -5,7 +5,7 @@
    全部只存本机（Store：lc:cfg 判定口径、lc:ui 外观、lc:ai 识图 Key、lc:map 底图）。
    改完立刻生效：权重走 Engine.setProfile（环境分立即按新权重重算），
    外观直接改 CSS 变量 / body class，底图换 Leaflet 瓦片层，不需要重新取数。 */
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useUiStore } from '../../stores/ui'
 import { useEnvStore, computeEnv } from '../../stores/env'
 import { useSpotsStore } from '../../stores/spots'
@@ -137,7 +137,12 @@ function applyMapUrl() {
   ui.mapApi?.applyBasemap?.()
 }
 
-
+/* 边打字边存：以前只写了 v-model，不打「应用」/不切底图就永远不落盘（换页签、重启就丢） */
+function saveMapUrl() {
+  MAPCFG.url = mapUrl.value.trim()
+  MAPCFG.key = mapKey.value.trim()
+  saveMapCfg()
+}
 
 /* ---------------------------------------------------------------- 识图与助手 */
 AI.load()
@@ -151,8 +156,38 @@ const aiChatModel = ref(aiCfg.chatModel || '')
 const aiTest = ref('')
 const testing = ref(false)
 
-/* 老壳的 AI.save() 不接参数：先把值写回 cfg 对象，再落盘 */
-function saveAi() {
+/* 内置厂商的默认值：选了就自动补上，用户不用去查 baseURL 与模型名 */
+const aiDefaults = computed(() => {
+  const p: any = aiProviders.find((x: any) => x.id === aiProvider.value) || {}
+  return { base: p.base || '', model: p.model || '', note: p.note || '', name: p.name || '', chat: p.chat || '', custom: !!p.custom }
+})
+const aiBaseAuto = computed(() => !!aiDefaults.value.base && aiBase.value.trim() === aiDefaults.value.base)
+const aiModelAuto = computed(() => !!aiDefaults.value.model && aiModel.value.trim() === aiDefaults.value.model)
+
+/* 选厂商 → 自动补全 baseURL / 模型名 / 清空对话模型（默认用同一个模型） */
+function pickProvider(id: string) {
+  aiProvider.value = id
+  const p: any = aiProviders.find((x: any) => x.id === id) || {}
+  aiBase.value = p.base || ''
+  aiModel.value = p.model || ''
+  aiChatModel.value = ''
+  saveAi(false)
+  toast(p.custom ? '自定义：请填 baseURL 与模型名'
+    : (p.model ? p.name + '：已填好 baseURL 与模型名' : p.name + '：baseURL 已填，模型名按接入点填'))
+  nextTick(() => ui.mapApi?.applyBasemap?.())
+}
+
+/* 打开设置时，如果选的是内置厂商但 base/model 还是空的（老配置或刚选完），补上默认值 */
+if (!aiCfg.provider) {
+  aiProvider.value = aiProviders[0].id
+}
+if (!aiBase.value && aiDefaults.value.base) aiBase.value = aiDefaults.value.base
+if (!aiModel.value && aiDefaults.value.model) aiModel.value = aiDefaults.value.model
+
+/* 老壳的 AI.save() 不接参数：先把值写回 cfg 对象，再落盘。
+   silent=true 时边打字不弹 toast（否则每敲一个字弹一次）。 */
+function saveAi(silent: boolean | Event = true) {
+  const quiet = silent !== false
   const c: any = AI.cfg()
   if (!c) return
   c.provider = aiProvider.value
@@ -161,7 +196,8 @@ function saveAi() {
   c.model = aiModel.value.trim()
   c.chatModel = aiChatModel.value.trim()
   AI.save()
-  toast('识图设置已保存（只存本机）')
+  Store.flush()                       // 立刻落盘：别指望 100 ms 的合并写赶在关页面前完成
+  if (!quiet) toast('识图设置已保存（只存本机）')
 }
 
 async function testAi() {
@@ -326,11 +362,11 @@ watch(visible, (on) => {
           </div>
           <div class="field">
             <label>自定义瓦片 URL（支持 {z} {x} {y} {s} {r} {key}）</label>
-            <input v-model="mapUrl" placeholder="https://tile.example.com/{z}/{x}/{y}.png?key={key}" autocomplete="off">
+            <input v-model="mapUrl" placeholder="https://tile.example.com/{z}/{x}/{y}.png?key={key}" autocomplete="off" @input="saveMapUrl">
           </div>
           <div class="field">
             <label>瓦片 API Key（填了会替换 URL 里的 {key}）</label>
-            <input v-model="mapKey" placeholder="可选；只存在本机（IndexedDB）" autocomplete="off">
+            <input v-model="mapKey" placeholder="可选；只存在本机（IndexedDB）" autocomplete="off" @input="saveMapUrl">
             <div class="chiprow" style="margin-top:8px">
               <button class="act ghost" @click="applyMapUrl">应用</button>
             </div>
@@ -354,25 +390,26 @@ watch(visible, (on) => {
         <template v-else-if="tab === 'ai'">
           <div class="field">
             <label>厂商</label>
-            <select v-model="aiProvider" @change="saveAi">
+            <select v-model="aiProvider" @change="pickProvider(aiProvider)">
               <option v-for="p in aiProviders" :key="p.id" :value="p.id">{{ p.name }}</option>
             </select>
+            <p class="hint">内置厂商会自动补上 baseURL 与模型名，只要填 Key。</p>
           </div>
           <div class="field">
             <label>API Key</label>
-            <input v-model="aiKey" placeholder="只存在本机，不上传" autocomplete="off" @change="saveAi">
+            <input v-model="aiKey" placeholder="只存在本机，不上传" autocomplete="off" @input="saveAi">
           </div>
           <div class="field">
-            <label>baseURL（自定义/代理时填）</label>
-            <input v-model="aiBase" placeholder="https://api.example.com/v1" autocomplete="off" @change="saveAi">
+            <label>baseURL<span class="hint-inline">{{ aiBaseAuto ? '已按厂商自动填好' : '自定义/代理时填' }}</span></label>
+            <input v-model="aiBase" :placeholder="aiDefaults.base || 'https://api.example.com/v1'" autocomplete="off" @input="saveAi">
           </div>
           <div class="field">
-            <label>模型名</label>
-            <input v-model="aiModel" placeholder="例如 vision 模型名" autocomplete="off" @change="saveAi">
+            <label>模型名<span class="hint-inline">{{ aiModelAuto ? '已按厂商自动填好' : '' }}</span></label>
+            <input v-model="aiModel" :placeholder="aiDefaults.model || '例如 vision 模型名'" autocomplete="off" @input="saveAi">
           </div>
           <div class="field">
             <label>对话模型（助手用，留空 = 用上面的模型）</label>
-            <input v-model="aiChatModel" placeholder="例如 deepseek-chat / gpt-4o-mini" autocomplete="off" @change="saveAi">
+            <input v-model="aiChatModel" :placeholder="aiDefaults.chat || '留空即可：同一模型既识图又调工具'" autocomplete="off" @input="saveAi">
           </div>
           <div class="chiprow">
             <button class="act ghost" :disabled="testing" @click="testAi">测试连接</button>

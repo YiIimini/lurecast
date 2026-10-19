@@ -449,6 +449,71 @@ P0 已按此开工并完成，见 §9。
 **已知限制**：改文案后仍要重跑那四步脚本（忘了补英文时单测会拦下来）；整句替换会抹掉句子内部的 `<b>`/`<code>` 强调，
 切回简体才恢复。
 
+## 18. 界面打磨 + 设置持久化 + 水族馆真 3D（2026-10-19）
+
+用户挑了 7 处，逐条改完并实测：
+
+### ① 页签改名
+
+`结论 → 总览`、`影像 → 地形`（后者本来就叫「地形结构」卡，页签名一直没跟上）。`i18n-phrases.ts` 补 `总览/Overview`、
+`地形/Terrain` → **278 条**。实测（生产构建，读 `nav.tabs` 的 textContent）：`总览 / 钓点 / 地形 / 我的`。
+
+### ② 罗盘：指针缓动 + 居中
+
+- 指针角度不能只靠 CSS `transition`：`rotate(350deg) → rotate(10deg)` 会倒着转 340°。
+  改成 `shownDeg` + `requestAnimationFrame` 按**最短弧**逼近：`diff = ((target - shown + 540) % 360) - 180`，系数 0.16。
+- 外面再包三层氛围：`cmpFlow` 三条气流线（`--flowDur` 随风速，0.6–2.6 s）、外圈 `cmpPulse`、中心直接显示风速数值。
+- 布局从「左罗盘右文案」改成纵向居中（`.compasswrap` column + `align-items:center`）。
+
+**实测**（真实 Open-Meteo 数据，点 `+6h` 后每 60 ms 采样 `.arrow` 的 inline transform）：
+`230° → 227.2 → 224.79 → 213.81 → 211.32 → 210.4 → 210.19°`，约 300 ms 收敛，无 page error；
+居中：容器 `left 25 / width 380` → 中心 215，罗盘 `left 149 / width 132` → 中心 215（差 0）。
+
+### ③ 按钮文字偏上（安卓实机）
+
+不是 padding 问题，是安卓 CJK 字体的 ascent/descent 比拉丁字体大：`line-height: normal` 会让字形整体偏上。
+统一 `button/.act/.chip/.tab/input/select { line-height: 1.15 }`，并给 `.act/.chip/.tab` 补 `display:flex; align-items:center; justify-content:center`。
+**实测**（Chrome 量 `getBoundingClientRect` 与文字基线）：文字中心偏移从 **-3 px** 收到 **-0.34 ~ -0.77 px**。
+
+### ④ 定位卡：四格 2×2 + 标签加重
+
+`.locgrid` 从 `repeat(auto-fit,minmax(...))` 改成 `repeat(2,minmax(0,1fr))`（实测两列各 167.5 px、四格等宽），
+`水域/目标鱼` 这类 key 标签从 11 px 提到 **12.5 px / 600 / `--ink-2`**，值 15 px。行内 padding 也一起放大到 10×12。
+
+### ⑤ 设置保存后重启丢失（三个真因叠在一起）
+
+1. 输入框绑的是 `@change`：不 blur 就不触发，切页签/杀进程就丢 → 全部改 `@input`；
+2. `Store` 的落盘是 100 ms 合并写：刚写完立刻被杀进程来不及 flush → 关键路径（`cfg.ts`/`basemap.ts`/`saveAi()`）显式 `Store.flush()`；
+3. 首帧用默认值渲染、随后又把默认值写回去，覆盖库里真数据 → `Store` 加 `loaded` 标志 + `pendingWrites`：
+   就绪前的写先攒着，库里有同名键以库为准（`applyPending()`）；`main.ts` 在超时兜底启动、`ready` 迟到兑现时补跑
+   `initPrefs()` + `I18N.load()/apply()`，并 `dispatchEvent('lc:store-ready')` 让 `App.vue` 重跑 `my.load()`。
+
+另外 `saveAi()` 改成静默（不再每敲一个字弹一次 toast），只在真的点了「保存」时提示。
+
+### ⑥ 选内置厂商自动补 URL / 模型名 / 对话模型
+
+`SettingsModal` 加 `aiDefaults` 表 + `pickProvider(id)`：选中厂商即填 `baseUrl` 与 `model`，清空 `chatModel` 并 toast 提示；
+打开设置时这些字段为空也会自动补。实测：OpenAI → `https://api.openai.com/v1` + `gpt-4o-mini`；
+Gemini → `…/v1beta` + `gemini-2.0-flash`；填完 key 重载仍在（配合 ⑤ 的 flush）。
+
+### ⑦ 水族馆：改用 three.js 真 3D
+
+2D canvas 画得再细也是「贴图在平移」，纵深感是假的。改成自托管 **three.js r170**（`assets/vendor/three.module.min.js`，
+675 KB，`import()` 懒加载，不进 app chunk），`src/lib/aqua3d.ts`（约 520 行）：
+
+- `FogExp2` 做水体衰减 + 一片 70×70 的河床（自定义 shader 叠焦散）、7 片加色光柱、水面波纹、水柱圆柱背景；
+- 16 株摆动细草、90 个气泡 `Points`；
+- 鱼体用 `ShaderMaterial` 在顶点着色器里做摆尾（比 CPU 逐段画便宜），椭圆巡游；
+- billboard 朝相机，并按**屏幕内水平速度**翻转贴图（否则掉头时鱼是倒着游的）；按 `species.layer` 分 top/mid/bot 三层高度；
+- `setPerf` 在掉帧时降 DPR、关光柱；`dispose()` 释放几何/贴图/上下文。
+
+`CardAqua.vue` 改成「3D 优先、`renderAqua()` 2D 兜底」：WebGL 不可用/加载失败就退回原来的 2D 画法。
+**一个坑**：3D 在场时全屏不能走老的 `aquaFull()`（它内部调 2D 的 `resizeAqua`，`getContext('2d')` 已返回 null），
+所以 3D 分支自己切 `card.fs` + `body.aquafs`。
+
+**实测**（生产构建 + Chrome + swiftshader，全屏 786×1704）：唯一颜色 **12.6 万**、平均色 rgb(31,60,68) 偏蓝、
+相邻两帧差异 **40–60 万像素**（确实在跑帧）、无 pageerror。
+
 ## 附：现状与目标对照表（验收时贴给用户看的）
 
 | 指标 | 现在（r29） | 重构后目标 |

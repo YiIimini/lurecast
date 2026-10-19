@@ -1,7 +1,7 @@
 /* LureCast · 界面文案对照表（自动生成，勿手改）
    ---------------------------------------------------------------------------
    来源：tools/i18n/collect_visible.py 在真机上把四个页签 + 各弹窗渲染一遍，抓出所有可见中文
-   （文本节点、属性、以及被 <b>/<code> 切开的整句），共 276 条；英文在 tools/i18n/en.py。
+   （文本节点、属性、以及被 <b>/<code> 切开的整句），共 278 条；英文在 tools/i18n/en.py。
    key = 简体原文，值 = [繁体, English]；繁体由 OpenCC(s2twp) 转出。
    地名与用户输入不在这张表里，所以不会被误翻。
    改文案后请重跑 tools/i18n/collect_visible.py → 补 en.py → gen_phrases.py。 */
@@ -67,6 +67,7 @@ export const PHRASES: Record<string, Phrase> = {
   '图片（选填，最多 6 张，只存这台设备）': ['圖片（選填，最多 6 張，只存這臺裝置）', 'Images (optional, up to 6, stored on this device only)'],
   '在地图上选点': ['在地圖上選點', 'Pick on the map'],
   '地图与路线': ['地圖與路線', 'Map & routes'],
+  '地形': ['地形', 'Terrain'],
   '地形结构': ['地形結構', 'Terrain structure'],
   '坐标 0.00000, 0.00000 · WGS-84，名称/描述/图片都只存本机': ['座標 0.00000, 0.00000 · WGS-84，名稱/描述/圖片都只存本機', 'Coordinate 0.00000, 0.00000 · WGS-84; name, notes and images stay on this device'],
   '坐标只在你本机换算，不上传任何服务器。': ['座標只在你本機換算，不上傳任何伺服器。', 'Coordinates are converted on device and never uploaded.'],
@@ -108,6 +109,7 @@ export const PHRASES: Record<string, Phrase> = {
   '微信 / QQ 等': ['微信 / QQ 等', 'WeChat / QQ etc.'],
   '性能与动效': ['效能與動效', 'Performance & motion'],
   '性能优先': ['效能優先', 'Performance first'],
+  '总览': ['總覽', 'Overview'],
   '我的': ['我的', 'Mine'],
   '我的水族馆': ['我的水族館', 'My aquarium'],
   '或直接填坐标（WGS84）': ['或直接填座標（WGS84）', 'Or type a coordinate (WGS84)'],

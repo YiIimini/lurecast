@@ -1146,3 +1146,67 @@ select.uisource { position: absolute; width: 1px; height: 1px; opacity: 0; point
 @media (max-width: 480px) {
   .leaflet-control-attribution { font-size: 10px !important; }
 }
+
+/* ---------------------------------------------------------------- 按钮文字垂直居中
+   安卓 WebView 里 CJK 字体（Noto Sans SC / 思源黑体）的 ascent 明显大于 descent，
+   `line-height: normal` 算出来的行盒上边多、下边少，于是 flex 居中居的是「行盒」，
+   文字看上去就顶在按钮上方、底下留一条白。修法：给按钮一个贴紧字形的行高，再做 flex 居中；
+   chip 原来用 baseline 对齐（带 em 副标签时才需要），这里统一改 center，em 各自居中。 */
+button, .act, .chip, .tab, input, select { line-height: 1.15; }
+.act, .uifoot .act, .aginput .act { display: inline-flex; align-items: center; justify-content: center; }
+.chip { display: inline-flex; align-items: center; }
+.chip em { align-self: center; }
+.tab { display: flex; align-items: center; justify-content: center; }
+
+/* ---------------------------------------------------------------- 定位卡四格与两个行首标签
+   四格固定 2×2 对称（原来 auto-fit 在大卡上会挤成一行四个，读起来没有分组感）；
+   「水域 / 目标鱼」这两个行首标签原来只有 11px 的灰色等宽字，看不清是分组标题，放大加粗并拉开一点距离。 */
+.locgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.locgrid .kv { padding: 10px 12px; }
+.locgrid .kv i { font-size: calc(11.5px * var(--fs) / 14px); letter-spacing: .02em; }
+.locgrid .kv b { font-size: calc(15px * var(--fs) / 14px); }
+.chiprow-key {
+  width: auto; min-width: 44px; text-align: left;
+  font-size: calc(12.5px * var(--fs) / 14px); font-weight: 600;
+  color: var(--ink-2); letter-spacing: .02em;
+}
+.chipwrap .chiprow { align-items: center; }
+@media (min-width: 860px) {
+  .locgrid { gap: 10px; }
+}
+
+/* ---------------------------------------------------------------- 风况卡：动态罗盘 + 居中
+   罗盘整体居中（原来是「罗盘 + 右侧长句」左右排，窄卡上长句被挤成三四行），
+   指针角度由 CardWind 里的 rAF 缓动驱动（这里不再用 transition，避免 0/360 边界绕圈）；
+   气流感（三条短线）沿指针方向持续外扩，速度跟风速走；
+   外圈有一圈很淡的脉冲，让人一眼看出这是「活的」罗盘而不是静态图标。 */
+.compasswrap { flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.compasswrap .compass { width: 132px; height: 132px; }
+.compasswrap .windtxt { display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: 30em; }
+.compasswrap .windtxt b { font-family: var(--mono); font-size: calc(15px * var(--fs) / 14px); color: var(--ink); }
+.compasswrap .windtxt span { font-size: calc(12px * var(--fs) / 14px); color: var(--ink-3); line-height: 1.45; }
+.windstages { justify-content: center; margin-top: 10px; }
+
+.compass .arrow { transform-origin: 58px 58px; will-change: transform; }
+.compass .needle-from { stroke: var(--ink-2); stroke-width: 2; stroke-linecap: round; }
+.compass .needle-to { stroke: var(--fam); stroke-width: 2.6; stroke-linecap: round; }
+.compass .ring { opacity: .18; animation: cmpPulse 3.6s ease-in-out infinite; transform-origin: 58px 58px; }
+.compass .spd { font-family: var(--mono); font-size: 13px; font-weight: 600; fill: var(--ink-2); }
+.compass .streaks line { stroke: var(--fam); stroke-width: 1.6; stroke-linecap: round; opacity: 0;
+  animation: cmpFlow var(--flowDur, 2s) linear infinite; }
+.compass .streaks .s1 { animation-delay: 0s; }
+.compass .streaks .s2 { animation-delay: calc(var(--flowDur, 2s) / -3); }
+.compass .streaks .s3 { animation-delay: calc(var(--flowDur, 2s) / -1.5); }
+.compass .tip { filter: drop-shadow(0 0 4px var(--fam)); }
+@keyframes cmpFlow {
+  0%   { transform: translateY(6px);  opacity: 0; }
+  25%  { opacity: .85; }
+  100% { transform: translateY(-14px); opacity: 0; }
+}
+@keyframes cmpPulse {
+  0%, 100% { opacity: .10; transform: scale(1); }
+  50%      { opacity: .26; transform: scale(1.035); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .compass .ring, .compass .streaks line { animation: none; }
+}

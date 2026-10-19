@@ -81,7 +81,7 @@ export function loadMapCfg() {
 }
 
 export function saveMapCfg() {
-  try { Store.setItem('lc:map', JSON.stringify(MAPCFG)) } catch { /* 忽略 */ }
+  try { Store.setItem('lc:map', JSON.stringify(MAPCFG)); Store.flush() } catch { /* 忽略 */ }
 }
 
 export function basemapById(id: string): Basemap {

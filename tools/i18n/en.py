@@ -322,4 +322,6 @@ EN = {
     "未命名位置30.2464, 120.1490 · 精度未知": "Unnamed place 30.2464, 120.1490 · accuracy unknown",
     "把 Deeper 导出的 CSV 导入进来，就能看到实测水深分布（不是按岸坡外推的估值）。 支持 Quest/PRO 的 bathymetry.csv（无表头 4/5 列）和手机 App 的 scan_data_*.csv（带表头）。":
         "Import a Deeper CSV to see the measured depth distribution (not an estimate extrapolated from the bank slope). Works with Quest/PRO bathymetry.csv (4/5 columns, no header) and the mobile app's scan_data_*.csv (with header).",
+    "总览": "Overview",
+    "地形": "Terrain",
 }

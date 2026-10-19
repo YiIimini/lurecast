@@ -18,6 +18,7 @@ lurecast/
 ├─ index.html + assets/*.js 老壳（13 个 IIFE）：只作回滚，新开发不要往里加
 ├─ assets/theme.css|app.css 设计令牌与组件样式（新壳直接 import，不换皮）
 ├─ assets/fish/             水族馆贴图（25 种鱼 + 河床）
+├─ assets/vendor/           自托管第三方依赖（three.js 水族馆 3D / geotiff.js 卫星）
 ├─ native/                  Capacitor 安卓工程 + 出包脚本 + 贴图生成脚本
 ├─ tools/i18n/              三语文案抓取与生成
 └─ docs/                    本目录
@@ -34,7 +35,7 @@ lurecast/
 | `npm run sync-web` | build + 装进 `native/www/`（默认不带老壳；`--with-legacy` 才带） |
 | `npm run preview` | 预览 `dist-web/` |
 
-## 三个容易踩的点（已修，别改回去）
+## 四个容易踩的点（已修，别改回去）
 
 1. **鱼贴图要复制**：水族馆的 25 张 `assets/fish/*.webp` 是运行期拼路径加载的，不是 import，
    Vite 不会搬。`vite.config.ts` 里的 `copyFishSprites()` 插件负责在 `closeBundle` 时复制进 `dist-web/assets/fish/`。
@@ -44,6 +45,10 @@ lurecast/
    随后一次写入还会把真数据覆盖。
 3. **样式导入顺序**：`leaflet.css` 必须在 `theme.css`/`app.css` 之前，否则 `.leaflet-container{background:#ddd}`
    会盖掉深色底（瓦片没加载出来时地图变浅灰）。
+4. **水族馆 3D 与 2D 别同时活着**：`aqua3d.ts` 拿到 WebGL 上下文后，canvas 就再也拿不到 `2d`（`getContext('2d')` 返回 null）。
+   所以全屏必须走 3D 自己的分支（切 `card.fs`/`body.aquafs`），不能调老的 `aquaFull()`（它内部会 `resizeAqua()`）；
+   3D 加载失败或 WebGL 不可用时才退回 `renderAqua()` 的 2D 画法。three.js 是 `import()` 懒加载的，
+   `assets/vendor/three.module.min.js`（675 KB）不进 app chunk，别改成静态 import。
 
 ## 测试怎么组织
 
@@ -57,7 +62,7 @@ lurecast/
 - 主分支 `main`，提交信息用 `Pn：一句话`（阶段号 + 改动），正文写「为什么」与实测数字。
 - **不跟踪**：`node_modules/`、`dist-web/`、`native/www/`、`native/android/**/build/`、
   `native/android/app/src/main/assets/public/`、`*.apk`、`*.log`、本机私有配置。
-- **跟踪**：源码、`assets/vendor/geotiff.js`（随项目发布的依赖）、安卓工程、贴图与文档。
+- **跟踪**：源码、`assets/vendor/`（`geotiff.js`、`three.module.min.js` 这几份随项目发布的依赖）、安卓工程、贴图与文档。
 - **换行**：`.gitattributes` 里源码强制 LF、`.ps1/.cmd` 强制 CRLF，避免 Windows 上脚本被改坏。
 - `gradle-wrapper.properties` 提交的是官方地址；本机离线编译用工具链里解压好的 gradle，别改这个文件（见 [`ANDROID.md`](ANDROID.md)）。
 

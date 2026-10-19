@@ -58,6 +58,20 @@ function boot() {
 }
 
 let booted = false
+let hydrated = false          // 是否在水合（读过了库里真数据）之后启动的
 const start = () => { if (!booted) { booted = true; boot() } }
-setTimeout(start, BOOT_TIMEOUT)
-Store.ready.then(start, start)   // Store.ready 是 Promise（不是函数），见 lib/store.ts
+
+/* 等存储就绪再启动；2.5 s 兜底只为不白屏。
+   兜底路径起来时存储还是空的（读到的都是默认值），所以 ready 真正兑现后再补一次水合：
+   重读偏好与语言、并通知各 store 重新加载渔获/地点/声呐 —— 否则就是「设置保存了、重启又变回去」。 */
+const timer = setTimeout(() => { if (!Store.loaded) start() }, BOOT_TIMEOUT)
+Store.ready.then(() => {
+  clearTimeout(timer)
+  if (!booted) { hydrated = true; start(); return }
+  if (hydrated) return
+  hydrated = true
+  initPrefs()
+  I18N.load()
+  I18N.apply()
+  window.dispatchEvent(new Event('lc:store-ready'))
+}, () => { clearTimeout(timer); start() })

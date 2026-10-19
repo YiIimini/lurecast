@@ -86,6 +86,9 @@ function onFocusSpot(s: any) {
 
 onMounted(() => {
   my.load()
+  /* 兜底启动（存储还没读完就挂上了）时，main.ts 会在真正就绪后补发这个事件：
+     重新读渔获/常用地点，避免用户看到「数据丢了」；设置项由 main 自己重读。 */
+  window.addEventListener('lc:store-ready', () => my.load())
   const q = new URLSearchParams(location.search)
   const lat = Number(q.get('lat'))
   const lon = Number(q.get('lon'))
@@ -121,7 +124,7 @@ onMounted(() => {
     </div>
 
     <nav class="tabs" role="tablist">
-      <button v-for="t in [['summary','结论'],['spots','钓点'],['sat','影像'],['me','我的']]" :key="t[0]"
+      <button v-for="t in [['summary','总览'],['spots','钓点'],['sat','地形'],['me','我的']]" :key="t[0]"
               class="tab" :class="{ on: ui.tab === t[0] }" role="tab" @click="ui.setTab(t[0] as any)">{{ t[1] }}</button>
     </nav>
   </div>
