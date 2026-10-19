@@ -476,9 +476,24 @@ function openOpts(block?: number) {
     });
   }
 
+  /* 同一次会话里的结果缓存：切页签会让卡片重新挂载，但模块不卸载；
+     中心点/半径/云量阈值没变就直接返回上次结果（不再打 STAC、不再抽查），
+     点「重新分析」时 CardSat 传 force: true 才重跑。 */
+  var resultCache: any = {};
+  function resultKey(lon, lat, radiusKm, cloud) {
+    return lon.toFixed(3) + ',' + lat.toFixed(3) + '|' + radiusKm + '|' + cloud;
+  }
+
   function analyse(lon, lat, opts) {
     opts = opts || {};
     var radiusKm = opts.radiusKm || 0.9;
+    var cloud = opts.maxCloud || 20;
+    var ck = resultKey(lon, lat, radiusKm, cloud);
+    var cached = resultCache[ck];
+    if (cached && !opts.force) {
+      if (opts.onProgress) opts.onProgress('用上次的结果（点「重新分析」才会重新下载）');
+      return Promise.resolve(cached);
+    }
     var bbox = lonLatBbox(lon, lat, radiusKm);
     var from = new Date(Date.now() - (opts.years || 3) * 365 * 86400000).toISOString();
     var progress = opts.onProgress || function () {};
@@ -487,7 +502,7 @@ function openOpts(block?: number) {
     var step = function (msg) { progress(msg + '（' + Math.round((Date.now() - t0) / 1000) + 's）'); };
 
     step('搜索 Sentinel-2 归档');
-    var chain = search(bbox, { maxCloud: opts.maxCloud || 20, from: from, limit: 80 })
+    var chain = search(bbox, { maxCloud: cloud, from: from, limit: 80 })
       .then(function (items) {
         if (!items.length) throw new Error('这附近 3 年内没有云量 <20% 的 Sentinel-2 影像');
         /* 抽查 3 期就够了（原来是 6 期）：每一期都要单独开 COG，慢网下多一期就多 5–8 秒 */
@@ -538,6 +553,9 @@ function openOpts(block?: number) {
     return withTimeout(chain, ms, function () {
       return new Error('影像下载超时（' + Math.round(ms / 1000) + ' 秒）。慢网下只读你周围这一小块也需要 10–30 秒，' +
         '可以缩小半径或稍后重试；已下载的块会留在缓存里。');
+    }).then(function (res) {
+      resultCache[ck] = res;      // 切页签回来、或再点一次（非 force）都直接拿它
+      return res;
     });
   }
 

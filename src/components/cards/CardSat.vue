@@ -61,6 +61,7 @@ async function analyse() {
     const r = await Sat.analyse(env.me.lon, env.me.lat, {
       radiusKm: zoomKm.value,
       size: 768,
+      force: has.value,          // 已经出过图 = 用户点的是「重新分析」，才真的重下
       onProgress: (t: string) => { progress.value = t }
     })
     res.value = r
