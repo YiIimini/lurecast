@@ -132,7 +132,8 @@ async function onImport(files: FileList | null) {
 
     <div class="card-foot">照片自动压到 480px 并只存这台设备；每条记录会带上当时的天气与鱼口指数。本地不做 AI 识别（避免认错鱼种），由你确认。</div>
 
-    <!-- 拍照后确认鱼种 -->
+    <!-- 拍照后确认鱼种（Teleport 到 body：卡片自带 transform/毛玻璃，会把 fixed 弹窗关在卡片里） -->
+    <Teleport to="body">
     <div class="modal" :class="{ hidden: !picker }" @click.self="cancelPicker">
       <div class="modal-box">
         <div class="modal-head">
@@ -170,8 +171,10 @@ async function onImport(files: FileList | null) {
         <div class="modal-foot">照片只存这台设备；会顺带记下当时的天气与鱼口指数。</div>
       </div>
     </div>
+    </Teleport>
 
-    <!-- 详情 -->
+    <!-- 详情（同样 Teleport） -->
+    <Teleport to="body">
     <div class="modal" :class="{ hidden: detailIdx < 0 }" @click.self="detailIdx = -1">
       <div class="modal-box">
         <div class="modal-head">
@@ -224,5 +227,6 @@ async function onImport(files: FileList | null) {
         <div class="modal-foot">照片与记录都只在这台设备上。</div>
       </div>
     </div>
+    </Teleport>
   </section>
 </template>

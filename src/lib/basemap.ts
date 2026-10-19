@@ -63,10 +63,17 @@ export const BASEMAPS: Basemap[] = [
    深色项靠给瓦片层加一层反相滤镜压暗，保持和界面同一套深色气质。 */
 export const MAPCFG = { style: 'osm-dark', url: '', key: '', v: 2 }
 
+/* 注意读取时机：这里以前是「模块一 import 就跑」，那时 IndexedDB 还没水合，
+   Store 的内存镜像还是空的 → 读到的永远是默认值（用户填的 CARTO Key / 选的底图在冷启动后集体消失）。
+   现在只在 Store 就绪后由 initPrefs() 调用；没水合时不许写默认值，免得把库里的真配置盖掉。 */
 export function loadMapCfg() {
   try {
     const raw = Store.getItem('lc:map')
-    if (!raw) { MAPCFG.v = 2; saveMapCfg(); return }
+    if (!raw) {
+      /* 没读到不代表没有：水合还没完成时不许写默认值，否则会把库里的真配置盖掉 */
+      if (Store.loaded) { MAPCFG.v = 2; saveMapCfg() }
+      return
+    }
     const o = JSON.parse(raw)
     if (o.style) MAPCFG.style = o.style
     MAPCFG.url = o.url || ''
@@ -105,5 +112,3 @@ export function resolveTileUrl(): string {
 export function mapAttribution(): string {
   return basemapById(MAPCFG.style).attr || '&copy; OpenStreetMap'
 }
-
-loadMapCfg()

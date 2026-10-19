@@ -66,7 +66,10 @@ void toast
 </script>
 
 <template>
-  <div class="modal" :class="{ hidden: !show }" @click.self="emit('close')">
+  <!-- 必须 Teleport 到 body：这个编辑框挂在「常用地点」卡片里，卡片的入场动画（transform）
+       与毛玻璃会形成包含块 + 层叠上下文，position:fixed 会被关在卡片里，看着就不像弹窗。 -->
+  <Teleport to="body">
+    <div class="modal" :class="{ hidden: !show }" @click.self="emit('close')">
     <div class="modal-box">
       <div class="modal-head">
         <h3>{{ title }}</h3>
@@ -104,5 +107,6 @@ void toast
         <button class="act primary" :disabled="busy" @click="save">保存</button>
       </div>
     </div>
-  </div>
+    </div>
+  </Teleport>
 </template>

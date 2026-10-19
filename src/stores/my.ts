@@ -12,6 +12,8 @@ import { Engine as E } from '../lib/engine'
 import { zipBuild, zipRead, b64FromBytes } from '../lib/zip'
 import { useEnvStore } from './env'
 import { useSpotsStore } from './spots'
+import { MAPCFG, saveMapCfg } from '../lib/basemap'
+import { CFG, UI, initPrefs } from '../lib/cfg'
 
 const KEY_FAV = 'lc:fav'
 const KEY_CATCH = 'lc:catches'
@@ -255,14 +257,28 @@ export const useMyStore = defineStore('my', {
             counts: { catches: data.catches.length, favorites: data.favorites.length }
           }, null, 2))
         },
+        {
+          /* 把「设置」也带进档案：底图 URL/Key、判定口径、外观、语言、罗盘开关。
+             重装 App（卸载会清空应用数据）后导入这个 zip 就能把配置拿回来。
+             AI 的 Key 故意不导出：那是最敏感的东西，宁可重填。 */
+          name: 'settings.json', data: enc.encode(JSON.stringify({
+            map: { style: MAPCFG.style, url: MAPCFG.url, key: MAPCFG.key, v: MAPCFG.v },
+            cfg: CFG, ui: UI,
+            lang: Store.getItem('lc:lang') || '',
+            compass: Store.getItem('lc:compass') || '',
+            note: 'AI Key 不在备份里，需要重新填'
+          }, null, 2))
+        },
         { name: 'catches.json', data: enc.encode(JSON.stringify(data.catches)) },
         { name: 'favorites.json', data: enc.encode(JSON.stringify(data.favorites)) },
         {
           name: 'README.txt', data: enc.encode(
             'LureCast 数据备份\n\n' +
             'catches.json  渔获档案（含照片，data URL 内联）\n' +
-            'favorites.json 常用地点（含描述与照片）\n\n' +
-            '恢复方式：打开 App → 我的 → 渔获档案 → 导入档案，选这个 zip。\n')
+            'favorites.json 常用地点（含描述与照片）\n' +
+            'settings.json 设置：底图 URL/Key、判定口径、外观、语言、罗盘开关（AI Key 不含，需重填）\n\n' +
+            '恢复方式：打开 App → 我的 → 渔获档案 → 导入档案，选这个 zip。\n' +
+            '重装 App（卸载会清空应用数据）后用同一个 zip 导入，配置和档案一起回来。\n')
         }
       ]
       const bytes = zipBuild(entries)
@@ -327,7 +343,30 @@ export const useMyStore = defineStore('my', {
       })
       this.favorites = favs.slice(0, 30)
       write(KEY_FAV, this.favorites)
-      return { added, updated, total: cur.length, places: favAdded }
+      /* 档案里如果有设置（底图 Key / 口径 / 外观），一并恢复 */
+      const restored = data.settings ? this.applySettings(data.settings) : false
+      return { added, updated, total: cur.length, places: favAdded, settings: restored }
+    },
+
+    /* 恢复设置：底图（含 Key）、判定口径、外观、语言、罗盘开关。
+       重装 App 会用掉应用数据，靠导入档案把配置拿回来（AI Key 不入档，需重填）。 */
+    applySettings(s: any) {
+      if (!s || typeof s !== 'object') return false
+      if (s.map && typeof s.map === 'object') {
+        if (s.map.style) MAPCFG.style = String(s.map.style)
+        MAPCFG.url = s.map.url ? String(s.map.url) : ''
+        MAPCFG.key = s.map.key ? String(s.map.key) : ''
+        MAPCFG.v = 2
+      }
+      if (s.cfg && typeof s.cfg === 'object') Object.assign(CFG, s.cfg)
+      if (s.ui && typeof s.ui === 'object') Object.assign(UI, s.ui)
+      try { if (s.lang) Store.setItem('lc:lang', String(s.lang)) } catch { /* 忽略 */ }
+      try { if (s.compass) Store.setItem('lc:compass', String(s.compass)) } catch { /* 忽略 */ }
+      saveMapCfg()
+      try { Store.flush() } catch { /* 忽略 */ }
+      initPrefs()      // 重新按新值应用：口径 / 外观 / 底图
+      window.dispatchEvent(new Event('lc:config-restored'))
+      return true
     },
 
     /* 从 File（.zip）导入 */
@@ -339,12 +378,17 @@ export const useMyStore = defineStore('my', {
         if (!files[n]) throw new Error('压缩包里缺少 ' + n)
         return JSON.parse(dec.decode(files[n]))
       }
-      const payload = {
+      const payload: any = {
         catches: pick('catches.json'),
         favorites: files['favorites.json'] ? pick('favorites.json') : []
       }
-      const res = this.importArchive(payload)
-      toast('导入完成：新增 ' + res.added + ' 条，更新 ' + res.updated + ' 条，地点 +' + res.places)
+      /* 备份里带设置（底图 Key / 口径 / 外观）就一起恢复；老备份没有这个文件也能导入 */
+      if (files['settings.json']) {
+        try { payload.settings = pick('settings.json') } catch { /* 坏了就跳过设置 */ }
+      }
+      const res: any = this.importArchive(payload)
+      toast('导入完成：新增 ' + res.added + ' 条，更新 ' + res.updated + ' 条，地点 +' + res.places +
+        (res.settings ? '，设置已恢复' : ''))
       return res
     }
   }

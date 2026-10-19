@@ -53,6 +53,11 @@ lurecast/
    与毛玻璃 `backdrop-filter`，会形成包含块 + 层叠上下文，fixed 被关在卡片里（实测只拿到 408×143），
    后面几张卡片还会盖在它上面。做法是把 `.mapbox` / `.aqua` 挪到 `<body>` 下、留注释锚点，关闭时搬回，
    并在 0 / 140 / 380 ms 各触发一次重算（Leaflet `invalidateSize`、canvas 重建）。
+   同理，卡片内的编辑/详情弹窗（常用地点编辑器、渔获确认与详情）也必须 `<Teleport to="body">`。
+6. **设置项一定要在 `Store.ready` 之后读**：`basemap.ts` 曾经在模块顶层直接 `loadMapCfg()`，
+   那时 IndexedDB 还没水合，读到的全是默认值 —— 用户填的 CARTO Key 每次冷启动都「消失」。
+   现在统一由 `initPrefs()`（`loadCfg` → `loadUi` → `applyUi` → `loadMapCfg`）在就绪后读一次，
+   且「没读到」时不许写默认值（只有 `Store.loaded` 为真才写），免得把库里的真配置盖掉。
 
 ## 测试怎么组织
 

@@ -6,6 +6,7 @@
    两个键：lc:cfg（判定口径）、lc:ui（外观与操作），都只在本机。 */
 import { Store } from './store'
 import { Engine as E } from './engine'
+import { loadMapCfg } from './basemap'
 
 export type Cfg = {
   score: 'balanced' | 'pressure' | 'temp' | 'wind'
@@ -105,9 +106,12 @@ export function applyUi() {
   document.body.classList.toggle('no-aurora', !UI.aurora)
 }
 
-/* 启动时按老壳顺序读一遍（先配置后外观） */
+/* 启动时按老壳顺序读一遍（先配置后外观，最后底图）。
+   底图配置必须在这里读：basemap.ts 以前在模块 import 时就读，那时 IndexedDB 还没水合，
+   读到的永远是默认值 —— 用户填的 CARTO Key 每次冷启动 / 重装后都「消失」。 */
 export function initPrefs() {
   loadCfg()
   loadUi()
   applyUi()
+  loadMapCfg()
 }

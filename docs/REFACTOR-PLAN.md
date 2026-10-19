@@ -571,6 +571,34 @@ Gemini → `…/v1beta` + `gemini-2.0-flash`；填完 key 重载仍在（配合 
 色点方位随航向整体偏移同样的角度（48.7°+90°=138.7°），说明指针指向的是**世界方位**而不是屏幕方位；
 关掉指北后刻度盘回正、重载仍是关（`lc:compass=off`）。三语补了 11 条文案 + `手机朝 (\d+)°` 模板（对照表 289 条）。
 
+## 21. 配置冷启动丢失的真因：读得太早（2026-10-19）
+
+用户反馈「CARTO 的 Key 配好了，重装后又没了」。查下来不是没存，而是**读的时机错了**：
+
+`basemap.ts` 末尾原来有一行模块级的 `loadMapCfg()` —— 模块一被 import 就执行，那时
+`Store` 的 IndexedDB 还在异步水合，内存镜像是空的，于是 `Store.getItem('lc:map')` 永远返回空，
+`MAPCFG` 每次启动都被重置成默认值（`style: 'osm-dark'`、`key: ''`）。库里其实一直存着用户的 Key。
+
+更糟的是它还会「补写默认值」：`if (!raw) saveMapCfg()` —— 只要哪次在空镜像上跑，就会把默认值写回去。
+（现在 `Store` 的 `pendingWrites/applyPending` 会以库里已有值为准，但那是第二道保险。）
+
+修法：
+
+1. 删掉模块级调用，改由 `initPrefs()` 在 `Store.ready` 之后调 `loadMapCfg()`；
+   `main.ts` 的超时兜底路径在迟到水合时也会再跑一次 `initPrefs()`。
+2. `loadMapCfg()` 里「没读到」不再无条件写默认值，只有 `Store.loaded` 为真才写。
+3. 「卸载重装」是系统行为（应用数据一起删），拦不住 —— 于是把设置并入档案：
+   `导出档案` 现在多一个 `settings.json`（底图 URL/Key、判定口径、外观、语言、罗盘开关），
+   `导入档案` 时若存在就一起恢复（`my.applySettings` → `initPrefs` + `saveMapCfg` + `Store.flush`）。
+   AI 的 API Key 故意不入档。
+
+**实测**（生产构建 + Chrome）：
+- 预置 `lc:map = {style:'dark', key:'CARTO-KEY-TEST-9'}` → 冷启动后设置里 Key 栏有值，
+  地图 4/4 个瓦片请求都带 `?key=CARTO-KEY-TEST-9`（修前这里全是空）。
+- 构造一个含 `settings.json` 的档案 zip → 导入 → 重载：瓦片 4/4 带 `key=RESTORED-CARTO-42`，设置里也是这个值。
+- 导出档案：zip 内 `manifest.json / settings.json / catches.json / favorites.json / README.txt`，
+  `settings.json` 里 `map.key` 正确，README 写明恢复方式。
+
 ## 附：现状与目标对照表（验收时贴给用户看的）
 
 | 指标 | 现在（r29） | 重构后目标 |
