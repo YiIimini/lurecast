@@ -1,7 +1,8 @@
 # 轮询 ComfyUI 任务并下载图片；文件名带前缀，互不覆盖
-param([int]$TimeoutSec = 600)
+param([int]$TimeoutSec = 600, [string]$Work = $env:TEMP)
 
-$scr = "C:\Users\Administrator\.pi-desktop\scratch\2434506d-efbb-4e77-a063-e44b657cb2a9"
+# ComfyUI 轮询：$Work 里放 last_prompt_id.txt / last_prefix.txt，图片下载到 $Work\icons
+$scr = $Work
 $id = (Get-Content "$scr\last_prompt_id.txt").Trim()
 $prefix = if (Test-Path "$scr\last_prefix.txt") { (Get-Content "$scr\last_prefix.txt").Trim() } else { "icon" }
 $out = "$scr\icons"

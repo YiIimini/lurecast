@@ -2,9 +2,10 @@
 #   自适应图标：全出血背景（launcher 自己裁剪）+ 透明前景 + 矢量 monochrome
 #   旧版图标：圆角方块 / 圆形，透明角
 param(
-  [string]$SourcePng = "C:\Users\Administrator\.pi-desktop\scratch\2434506d-efbb-4e77-a063-e44b657cb2a9\icons\icon_1.png",
-  [string]$ResDir = "D:\Ai\Datas\lurecast\native\android\app\src\main\res",
-  [string]$WebIcons = "D:\Ai\Datas\lurecast\icons",
+  # 源图：一张 1024×1024 的方形 PNG（默认取 icons/source/icon-1024-source.png）
+  [string]$SourcePng = (Join-Path $PSScriptRoot "..\..\icons\source\icon-1024-source.png"),
+  [string]$ResDir = (Join-Path $PSScriptRoot "..\android\app\src\main\res"),
+  [string]$WebIcons = (Join-Path $PSScriptRoot "..\..\icons"),
   [double]$ArtScale = 0.88
 )
 
@@ -110,12 +111,13 @@ $w192 = New-Rounded $artBase 192 0.22
 $w192.Save((Join-Path $WebIcons 'icon-192.png'), [System.Drawing.Imaging.ImageFormat]::Png); $w192.Dispose()
 "网页图标 icon-512.png / icon-192.png 已更新"
 
-# 5) 预览
-$prevDir = "C:\Users\Administrator\.pi-desktop\scratch\2434506d-efbb-4e77-a063-e44b657cb2a9\icons"
+# 5) 预览（写到 icons/source/，与源图放一起）
+$prevDir = Join-Path $WebIcons 'source'
+New-Item -ItemType Directory -Force -Path $prevDir | Out-Null
 $prev = New-Rounded $artBase 256 0.22
-$prev.Save((Join-Path $prevDir 'preview_rounded.png'), [System.Drawing.Imaging.ImageFormat]::Png); $prev.Dispose()
+$prev.Save((Join-Path $prevDir 'preview-rounded.png'), [System.Drawing.Imaging.ImageFormat]::Png); $prev.Dispose()
 $circPrev = New-Circle $artBase 256
-$circPrev.Save((Join-Path $prevDir 'preview_circle.png'), [System.Drawing.Imaging.ImageFormat]::Png); $circPrev.Dispose()
+$circPrev.Save((Join-Path $prevDir 'preview-circle.png'), [System.Drawing.Imaging.ImageFormat]::Png); $circPrev.Dispose()
 $artBase.Dispose(); $srcBmp.Dispose()
-"预览: preview_rounded.png / preview_circle.png"
+"预览: icons/source/preview-rounded.png / preview-circle.png"
 

@@ -213,3 +213,23 @@ cd android
 - OSM 不可用时「水域类型」只能默认「河流」，千岛湖这类水库需手动点 chips 纠正。
 - 模拟器是软件 GL（swiftshader），帧率约 17–28 fps；真机 GPU 下会明显更高。
 - 未测：真机相机实拍取景、真机 GPS 户外漂移、iOS 构建。
+
+## 应用内检查更新（不跟随仓库自动更新）
+
+安卓不允许 App 静默替换自己（必须经系统安装器），所以做不到「跟着仓库自动更新」。
+设置 →「版本与更新」里做成了**应用内检查 + 一键下载**：填一个公开可访问的更新源即可。
+
+| 方案 | 改动生效 | 代价 |
+|---|---|---|
+| **A. 应用内检查更新**（已实现） | 重新 `assembleDebug` → 上传到**公开 Release / 网盘** → 更新 `version.json` 的 `build` 号 | 用户点一次「去下载 → 安装」，数据不丢 |
+| **B. 网页热更新** | 网页放到 GitHub Pages 或任意静态托管，APK 指向远程地址 → 改完即生效 | 需要联网；离线开局能力变弱 |
+| **C. 两者结合** | APK 内置页面 + Pages 作为「最新体验通道」 | 要维护两处入口 |
+
+`version.json` 格式（`src/lib/update.ts` 读它，`build` 大于当前才算新版本）：
+
+```json
+{ "build": 19, "apk": "https://…/LureCast.apk", "notes": "这次改了什么", "url": "发布页" }
+```
+
+也可以直接填 GitHub Release API：`https://api.github.com/repos/owner/repo/releases/latest`
+（公开仓库可用；App 自动取最新 release 的 `.apk` 资产与更新说明）。私有仓库需要 token，App 里不放 token。
