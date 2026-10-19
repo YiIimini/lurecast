@@ -7,6 +7,7 @@ import { useEnvStore } from '../../stores/env'
 import { useSpotsStore } from '../../stores/spots'
 import { MAPCFG, basemapById } from '../../lib/basemap'
 import { useUiStore } from '../../stores/ui'
+import { closePreview, isPreviewOpen, openPreview } from '../../lib/preview'
 
 const env = useEnvStore()
 const ui = useUiStore()
@@ -18,17 +19,19 @@ const emit = defineEmits<{
 
 const spots = useSpotsStore()
 const mapRef = ref<any>(null)
-const fs = ref(false)
+
 
 const basemapName = ref(basemapById(MAPCFG.style).name)
 
+/* 全屏不再是「把卡片铺满」（标题与说明会压住图），改成弹窗预览：只把地图层提到视口上 */
 function toggleFull() {
-  fs.value = !fs.value
-  document.body.classList.toggle('mapfs', fs.value)
-  // 进出各变一次尺寸，两头都让 Leaflet 重算，否则瓦片留白
+  const el = document.querySelector('#cardMap > .mapbox') as HTMLElement | null
+  openPreview('map', '钓点分布', el, () => {
+    if (mapRef.value) mapRef.value.invalidate()
+  })
   setTimeout(() => mapRef.value && mapRef.value.invalidate(), 60)
   setTimeout(() => mapRef.value && mapRef.value.invalidate(), 320)
-  if (fs.value && mapRef.value) mapRef.value.recenter()
+  if (mapRef.value) mapRef.value.recenter()
 }
 
 function setHere(lat: number, lon: number) {
@@ -39,7 +42,7 @@ function setHere(lat: number, lon: number) {
 onMounted(() => { ui.mapApi = mapRef.value })
 
 onBeforeUnmount(() => {
-  if (fs.value) document.body.classList.remove('mapfs')
+  if (isPreviewOpen('map')) closePreview()
   ui.mapApi = null
 })
 
@@ -54,7 +57,7 @@ defineExpose({
 </script>
 
 <template>
-  <section id="cardMap" class="card span2 show" :class="{ fs }" data-fam="map">
+  <section id="cardMap" class="card span2 show" data-fam="map">
     <div class="card-head">
       <span class="ico"><i class="ic" data-icon="map"></i></span>
       <h2>钓点分布</h2>

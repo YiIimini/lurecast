@@ -26,6 +26,7 @@ import FindWater from './components/modals/FindWater.vue'
 import ShareModal from './components/modals/ShareModal.vue'
 import SettingsModal from './components/modals/SettingsModal.vue'
 import AgentModal from './components/modals/AgentModal.vue'
+import PreviewLayer from './components/modals/PreviewLayer.vue'
 import CardSat from './components/cards/CardSat.vue'
 import CardSonar from './components/cards/CardSonar.vue'
 
@@ -162,5 +163,6 @@ onMounted(() => {
   <FindWater />
   <ShareModal />
   <SettingsModal />
-  <AgentModal />
+<AgentModal />
+<PreviewLayer />
 </template>

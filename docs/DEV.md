@@ -35,7 +35,7 @@ lurecast/
 | `npm run sync-web` | build + 装进 `native/www/`（默认不带老壳；`--with-legacy` 才带） |
 | `npm run preview` | 预览 `dist-web/` |
 
-## 四个容易踩的点（已修，别改回去）
+## 五个容易踩的点（已修，别改回去）
 
 1. **鱼贴图要复制**：水族馆的 25 张 `assets/fish/*.webp` 是运行期拼路径加载的，不是 import，
    Vite 不会搬。`vite.config.ts` 里的 `copyFishSprites()` 插件负责在 `closeBundle` 时复制进 `dist-web/assets/fish/`。
@@ -46,9 +46,13 @@ lurecast/
 3. **样式导入顺序**：`leaflet.css` 必须在 `theme.css`/`app.css` 之前，否则 `.leaflet-container{background:#ddd}`
    会盖掉深色底（瓦片没加载出来时地图变浅灰）。
 4. **水族馆 3D 与 2D 别同时活着**：`aqua3d.ts` 拿到 WebGL 上下文后，canvas 就再也拿不到 `2d`（`getContext('2d')` 返回 null）。
-   所以全屏必须走 3D 自己的分支（切 `card.fs`/`body.aquafs`），不能调老的 `aquaFull()`（它内部会 `resizeAqua()`）；
-   3D 加载失败或 WebGL 不可用时才退回 `renderAqua()` 的 2D 画法。three.js 是 `import()` 懒加载的，
-   `assets/vendor/three.module.min.js`（675 KB）不进 app chunk，别改成静态 import。
+   所以 2D 兜底只在 3D 没起来时启用；3D 在场时不能调老的 `aquaFull()`（它内部会 `resizeAqua()`）。
+   three.js 是 `import()` 懒加载的，`assets/vendor/three.module.min.js`（675 KB）不进 app chunk，别改成静态 import。
+5. **弹窗预览必须真搬 DOM**（`src/lib/preview.ts`）：地图/水族馆的「全屏」只给内容层加 `position:fixed`
+   **不生效** —— 卡片自带入场动画（`animation: tabIn … both`，计算值 `transform: matrix(1,0,0,1,0,0)`）
+   与毛玻璃 `backdrop-filter`，会形成包含块 + 层叠上下文，fixed 被关在卡片里（实测只拿到 408×143），
+   后面几张卡片还会盖在它上面。做法是把 `.mapbox` / `.aqua` 挪到 `<body>` 下、留注释锚点，关闭时搬回，
+   并在 0 / 140 / 380 ms 各触发一次重算（Leaflet `invalidateSize`、canvas 重建）。
 
 ## 测试怎么组织
 

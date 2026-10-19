@@ -8,8 +8,9 @@
    这里只负责：把已解锁鱼种喂给它、维护角标/图例/空态、全屏、生命周期。 */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useMyStore } from '../../stores/my'
-import { setUnlockedGetter, stopAqua, renderAqua, aquaFull, isAquaFull } from '../../lib/aqua'
+import { setUnlockedGetter, stopAqua, renderAqua, resizeAqua } from '../../lib/aqua'
 import { SPECIES_DB } from '../../lib/species'
+import { closePreview, isPreviewOpen, openPreview } from '../../lib/preview'
 import { createAqua3D } from '../../lib/aqua3d'
 
 const my = useMyStore()
@@ -58,36 +59,24 @@ async function boot() {
   renderAqua()          // 2D 兜底（内部也会写角标/图例/空态）
 }
 
+/* 「全屏」改成弹窗预览：只把水箱那层提到视口上，标题条与说明文字不会再压住画面。
+   3D 在场时不能走老 aquaFull()（内部会调 2D 的 resizeAqua，canvas 已有 WebGL 上下文）。 */
 function toggleFull() {
-  /* 3D 在场时不能走 aquaFull()：那个函数会顺手启动 2D 渲染器（startAqua → resizeAqua），
-     而同一块 canvas 已经有 WebGL 上下文，getContext('2d') 返回 null，直接抛错。
-     CSS 那套（card.fs + body.aquafs）在这里自己切，效果完全一样。 */
-  if (using3D) {
-    const card = document.getElementById('cardAqua')
-    if (!card) return
-    const want = !card.classList.contains('fs')
-    card.classList.toggle('fs', want)
-    document.body.classList.toggle('aquafs', want)
-    requestAnimationFrame(() => a3d?.resize?.())
-    return
-  }
-  aquaFull(!isAquaFull())
-}
-
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape' && isAquaFull()) toggleFull()
+  const el = canvasEl.value ? (canvasEl.value.parentElement as HTMLElement | null) : null
+  openPreview('aqua', '我的水族馆', el, () => {
+    if (using3D && a3d) a3d.resize?.()
+    else { if (canvasEl.value) resizeAqua(canvasEl.value); renderAqua() }
+  })
 }
 
 onMounted(() => {
   boot()
-  window.addEventListener('keydown', onKey)
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKey)
+  if (isPreviewOpen('aqua')) closePreview()
   if (a3d) { a3d.dispose(); a3d = null }
   stopAqua()
-  document.body.classList.remove('aquafs')
 })
 
 /* 解锁/删除渔获后重排 */

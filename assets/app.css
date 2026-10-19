@@ -1210,3 +1210,47 @@ button, .act, .chip, .tab, input, select { line-height: 1.15; }
 @media (prefers-reduced-motion: reduce) {
   .compass .ring, .compass .streaks line { animation: none; }
 }
+
+/* ---------------------------------------------------------- 弹窗预览（地图 / 水族馆）
+   以前是「把整张卡片铺满」（#cardMap.fs / #cardAqua.fs）：卡片标题、图例、脚注都跟着进来，
+   压在画面上挡掉一圈，看不全内容。
+   现在只把内容层（.mapbox / .aqua）搬到 <body> 下、铺满视口，卡片其余文字被完全盖住，
+   最上面留一根半透明标题条 + 关闭按钮。
+   （必须真搬 DOM：卡片自带入场动画的 transform 与毛玻璃 backdrop-filter 会形成包含块与层叠上下文，
+   只加 position:fixed 的话会被关在卡片里，后面几张卡片还会盖上来。） */
+body.pv-on { overflow: hidden; }
+
+.pv-target {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 90 !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+.pv-target.pv-target-aqua { background: #04121a; }
+/* 预览里才露出鱼种图例（卡片状态下列表在脚注里） */
+.pv-target-aqua .aqua-legend { display: flex; }
+/* 地图的 ± 缩放按钮别被标题条压住 */
+body.pv-map .leaflet-top { margin-top: calc(46px + env(safe-area-inset-top, 0px)); }
+body.pv-map .leaflet-bottom { margin-bottom: 8px; }
+.pvbar {
+  position: fixed; z-index: 92; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 14px;
+  background: linear-gradient(180deg, rgba(4, 14, 20, .88), rgba(4, 14, 20, .52) 58%, rgba(4, 14, 20, 0));
+  pointer-events: none;
+}
+.pvbar h3 {
+  flex: 1; margin: 0; font-size: calc(15px * var(--fs) / 14px); font-weight: 600;
+  color: var(--ink); text-shadow: 0 1px 10px rgba(0, 0, 0, .7);
+}
+.pvbar .pvclose {
+  pointer-events: auto;
+  background: rgba(6, 20, 28, .78);
+  backdrop-filter: blur(6px);
+}
+body.perf .pvbar .pvclose { backdrop-filter: none; }
