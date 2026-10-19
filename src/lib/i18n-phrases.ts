@@ -1,7 +1,7 @@
 /* LureCast · 界面文案对照表（自动生成，勿手改）
    ---------------------------------------------------------------------------
    来源：tools/i18n/collect_visible.py 在真机上把四个页签 + 各弹窗渲染一遍，抓出所有可见中文
-   （文本节点、属性、以及被 <b>/<code> 切开的整句），共 278 条；英文在 tools/i18n/en.py。
+   （文本节点、属性、以及被 <b>/<code> 切开的整句），共 289 条；英文在 tools/i18n/en.py。
    key = 简体原文，值 = [繁体, English]；繁体由 OpenCC(s2twp) 转出。
    地名与用户输入不在这张表里，所以不会被误翻。
    改文案后请重跑 tools/i18n/collect_visible.py → 补 en.py → gen_phrases.py。 */
@@ -87,6 +87,7 @@ export const PHRASES: Record<string, Phrase> = {
   '定位后会给出结论、最佳时段和注意点。': ['定位後會給出結論、最佳時段和注意點。', 'After locating you get the verdict, the best window and caveats.'],
   '实测': ['實測', 'measured'],
   '实测水深来自你的 Deeper 导出文件，只在本机解析与保存；与「地形结构」卡里的近岸深度（按 DEM 岸坡外推的估值）是两回事。': ['實測水深來自你的 Deeper 匯出檔案，只在本機解析與儲存；與「地形結構」卡里的近岸深度（按 DEM 岸坡外推的估值）是兩回事。', 'Measured depths come from your Deeper export, parsed and stored on device only; they are not the near-shore depth estimate extrapolated from the DEM in the terrain card.'],
+  '实线箭头＝风吹向的方向，细尾在来风一侧。 开「指北」后刻度盘跟着手机反向转，N 永远贴着真北。 没开指北或设备没有磁力计时，N 只是朝屏幕上方。下面可以点未来 1/3/6 小时看风怎么转。': ['實線箭頭＝風吹向的方向，細尾在來風一側。 開「指北」後刻度盤跟著手機反向轉，N 永遠貼著真北。 沒開指北或裝置沒有磁力計時，N 只是朝螢幕上方。下面可以點未來 1/3/6 小時看風怎麼轉。', 'The solid arrow shows where the wind blows to; the thin tail sits on the windward side. With North on, the dial counter-rotates with your phone so N always tracks true north; otherwise N is just screen-up. Tap +1/+3/+6 h below to see how the wind turns.'],
   '对比期': ['對比期', 'Comparison'],
   '导入 Deeper CSV': ['匯入 Deeper CSV', 'Import Deeper CSV'],
   '导入档案': ['匯入檔案', 'Import archive'],
@@ -103,6 +104,7 @@ export const PHRASES: Record<string, Phrase> = {
   '应用助手': ['應用助手', 'Assistant'],
   '应用助手|读本机数据回答问题（需要在设置里填 Key）': ['應用助手|讀本機資料回答問題（需要在設定裡填 Key）', 'Assistant|Answers from on-device data (needs a key in Settings).'],
   '底图': ['底圖', 'Basemap'],
+  '开启指北后刻度盘跟着手机转，N 永远对着真北；没有方向传感器的设备保持 N 朝上。': ['開啟指北後刻度盤跟著手機轉，N 永遠對著真北；沒有方向感測器的裝置保持 N 朝上。', 'With North on, the dial follows your phone so N always faces true north; devices without a heading sensor keep N pointing screen-up.'],
   '异常点': ['異常點', 'Anomalies'],
   '当前位置与水域': ['當前位置與水域', 'Location & water'],
   '影像': ['影像', 'Imagery'],
@@ -121,6 +123,10 @@ export const PHRASES: Record<string, Phrase> = {
   '拍照': ['拍照', 'Shoot photo'],
   '拍照存档一条鱼，它就会游进这里。': ['拍照存檔一條魚，它就會遊進這裡。', 'Log a fish with a photo and it swims in here.'],
   '拟饵 / 咬口 / 天气（可空）': ['擬餌 / 咬口 / 天氣（可空）', 'Lure / bites / weather (optional)'],
+  '指北': ['指北', 'North'],
+  '指北 ✓': ['指北 ✓', 'North ✓'],
+  '指北…': ['指北…', 'North…'],
+  '指北被拒': ['指北被拒', 'North denied'],
   '按这个窗口重读': ['按這個視窗重讀', 'Re-read at this window'],
   '换个目标鱼要改什么': ['換個目標魚要改什麼', 'What to change for another target'],
   '推荐钓点': ['推薦釣點', 'Recommended spots'],
@@ -134,6 +140,7 @@ export const PHRASES: Record<string, Phrase> = {
   '文件只在本机解析，不上传；解析结果存在本机，下次打开还在。': ['檔案只在本機解析，不上傳；解析結果存在本機，下次開啟還在。', 'The file is parsed on device and never uploaded; the result is kept for next time.'],
   '无': ['無', 'None'],
   '无数据 · 试着手动选水域': ['無資料 · 試著手動選水域', 'No data · try picking water manually'],
+  '无磁力计': ['無磁力計', 'No compass'],
   '时窗': ['時窗', 'Window'],
   '暂无逐小时数据': ['暫無逐小時資料', 'No hourly data yet'],
   '最近哪个钓点最靠谱': ['最近哪個釣點最靠譜', 'Which nearby spot is most reliable?'],
@@ -202,6 +209,7 @@ export const PHRASES: Record<string, Phrase> = {
   '百度导航': ['百度導航', 'Baidu Maps'],
   '目标鱼': ['目標魚', 'Target fish'],
   '看全部': ['看全部', 'Show all'],
+  '真北相对屏幕的位置随手机转动': ['真北相對螢幕的位置隨手機轉動', 'Where true north sits on screen follows your phone'],
   '真实影像': ['真實影像', 'True colour'],
   '石墨灰': ['石墨灰', 'Graphite'],
   '移除照片': ['移除照片', 'Remove photo'],
@@ -215,7 +223,9 @@ export const PHRASES: Record<string, Phrase> = {
   '纬度 31.2304': ['緯度 31.2304', 'Latitude 31.2304'],
   '经度 121.4737': ['經度 121.4737', 'Longitude 121.4737'],
   '结论': ['結論', 'Verdict'],
+  '罗盘固定朝上': ['羅盤固定朝上', 'Compass locked upright'],
   '罗盘实线箭头＝风吹向的方向。下面可以点未来 1/3/6 小时看风怎么转。': ['羅盤實線箭頭＝風吹向的方向。下面可以點未來 1/3/6 小時看風怎麼轉。', 'The solid compass arrow is where the wind blows to. Tap +1/+3/+6 h below to see how it turns.'],
+  '罗盘指北|开：刻度盘跟着手机方向反向转，N 永远指向真北，指针也换算成真北方位；关：刻度盘固定朝上。': ['羅盤指北|開：刻度盤跟著手機方向反向轉，N 永遠指向真北，指標也換算成真北方位；關：刻度盤固定朝上。', 'Compass north|On: the dial counter-rotates with your phone so N always points to true north and the needle uses true bearings. Off: the dial stays screen-up.'],
   '罗非鱼 · Oreochromis niloticus': ['羅非魚 · Oreochromis niloticus', 'Tilapia · Oreochromis niloticus'],
   '翘嘴': ['翹嘴', 'Culter'],
   '翘嘴鲌': ['翹嘴鮊', 'Culter'],
@@ -261,6 +271,7 @@ export const PHRASES: Record<string, Phrase> = {
   '需要 OSM 收录的水域几何 + 高程采样；换个靠水的位置再试。': ['需要 OSM 收錄的水域幾何 + 高程取樣；換個靠水的位置再試。', 'Needs water geometry from OSM plus elevation sampling; try a spot closer to the water.'],
   '青石斑 · Epinephelus akaara': ['青石斑 · Epinephelus akaara', 'Hong Kong grouper · Epinephelus akaara'],
   '风况与迎风岸': ['風況與迎風岸', 'Wind & windward bank'],
+  '风向未知': ['風向未知', 'Wind unknown'],
   '风寒/闷热修正': ['風寒/悶熱修正', 'Wind-chill / mugginess'],
   '马口/溪流': ['馬口/溪流', 'Stream / chub'],
   '马口鱼 · Opsariichthys bidens': ['馬口魚 · Opsariichthys bidens', 'Chinese hooksnout carp · Opsariichthys bidens'],
@@ -300,5 +311,6 @@ export const PATTERNS: Array<[RegExp, string, string]> = [
   [/^([\d.]+), ([\d.]+) · 精度未知$/, '$1, $2 · 精度未知', '$1, $2 · accuracy unknown'],
   [/^([\d.]+), ([\d.]+) · 已存常用地点$/, '$1, $2 · 已存常用地點', '$1, $2 · saved place'],
   [/^(\d+) 条记录$/, '$1 條記錄', '$1 records'],
-  [/^水体占比 (\d+)% · 云 (\d+)%$/, ' 水體佔比 $1% · 雲 $2%', ' Water $1% · cloud $2%']
+  [/^水体占比 (\d+)% · 云 (\d+)%$/, ' 水體佔比 $1% · 雲 $2%', ' Water $1% · cloud $2%'],
+  [/^手机朝 (\d+)°$/, '手機朝 $1°', 'phone faces $1°']
 ]

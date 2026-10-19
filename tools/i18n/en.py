@@ -222,6 +222,20 @@ EN = {
     "结论": "Verdict",
     "罗盘实线箭头＝风吹向的方向。下面可以点未来 1/3/6 小时看风怎么转。":
         "The solid compass arrow is where the wind blows to. Tap +1/+3/+6 h below to see how it turns.",
+    "实线箭头＝风吹向的方向，细尾在来风一侧。 开「指北」后刻度盘跟着手机反向转，N 永远贴着真北。 没开指北或设备没有磁力计时，N 只是朝屏幕上方。下面可以点未来 1/3/6 小时看风怎么转。":
+        "The solid arrow shows where the wind blows to; the thin tail sits on the windward side. With North on, the dial counter-rotates with your phone so N always tracks true north; otherwise N is just screen-up. Tap +1/+3/+6 h below to see how the wind turns.",
+    "罗盘指北|开：刻度盘跟着手机方向反向转，N 永远指向真北，指针也换算成真北方位；关：刻度盘固定朝上。":
+        "Compass north|On: the dial counter-rotates with your phone so N always points to true north and the needle uses true bearings. Off: the dial stays screen-up.",
+    "指北": "North",
+    "指北…": "North…",
+    "指北 ✓": "North ✓",
+    "指北被拒": "North denied",
+    "无磁力计": "No compass",
+    "风向未知": "Wind unknown",
+    "罗盘固定朝上": "Compass locked upright",
+    "开启指北后刻度盘跟着手机转，N 永远对着真北；没有方向传感器的设备保持 N 朝上。":
+        "With North on, the dial follows your phone so N always faces true north; devices without a heading sensor keep N pointing screen-up.",
+    "真北相对屏幕的位置随手机转动": "Where true north sits on screen follows your phone",
     "罗非鱼 · Oreochromis niloticus": "Tilapia · Oreochromis niloticus",
     "翘嘴": "Culter",
     "翘嘴鲌": "Culter",

@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useEnvStore } from '../../stores/env'
 import { Engine as E } from '../../lib/engine'
+import {
+  headingDeg, headingHas, headingLabel, headingOn, headingState, initHeading, setHeadingEnabled
+} from '../../lib/heading'
 
 const env = useEnvStore()
 const ahead = ref(0) // 0 / 1 / 3 / 6 小时后
@@ -32,7 +35,11 @@ const slot = computed(() => {
 const dir = computed(() => (slot.value && slot.value.dir != null ? slot.value.dir : cur.value.wind_direction_10m))
 const speed = computed(() => (slot.value && slot.value.speed != null ? slot.value.speed : cur.value.wind_speed_10m))
 const gust = computed(() => (slot.value && slot.value.gust != null ? slot.value.gust : cur.value.wind_gusts_10m))
-const arrowDeg = computed(() => (dir.value != null ? (dir.value + 180) % 360 : 0))
+/* 罗盘上「指针朝哪」用的是真北方位：0=N、90=E。指针 0° 时色点在正下方，
+   所以屏幕角度还要 +180；再减去手机航向，就得到「相对屏幕」的角度（见 tick）。 */
+const arrowDeg = computed(() => (dir.value != null ? ((dir.value % 360) + 360) % 360 : 0))
+/* 开指北且拿到过绝对方向才让刻度盘跟着手机转；否则保持 N 朝上，不装作知道北在哪 */
+const headingTarget = computed(() => (headingOn.value && headingHas.value ? headingDeg.value : 0))
 const text = computed(() => {
   if (dir.value == null || speed.value == null) return '--'
   const from = E.compass(dir.value)
@@ -45,16 +52,33 @@ const text = computed(() => {
    注意：watch 的 getter 会被立刻求值一次，所以这段必须放在 arrowDeg 之后，
    否则 setup 阶段就会撞上 TDZ（Cannot access 'x' before initialization）。 */
 const shownDeg = ref(0)
+const shownH = ref(0)
 let raf = 0
 function tick() {
-  const target = arrowDeg.value
-  const diff = ((target - shownDeg.value + 540) % 360) - 180
-  if (Math.abs(diff) < 0.06) { shownDeg.value = target; raf = 0; return }
-  shownDeg.value = (shownDeg.value + diff * 0.16 + 360) % 360
+  const d1 = ((arrowDeg.value - shownDeg.value + 540) % 360) - 180
+  const d2 = ((headingTarget.value - shownH.value + 540) % 360) - 180
+  if (Math.abs(d1) < 0.06 && Math.abs(d2) < 0.06) {
+    shownDeg.value = arrowDeg.value
+    shownH.value = headingTarget.value
+    raf = 0
+    return
+  }
+  shownDeg.value = (shownDeg.value + d1 * 0.16 + 360) % 360
+  shownH.value = (shownH.value + d2 * 0.2 + 360) % 360
   raf = requestAnimationFrame(tick)
 }
-watch(() => arrowDeg.value, () => { if (!raf) raf = requestAnimationFrame(tick) })
+watch(() => [arrowDeg.value, headingTarget.value], () => { if (!raf) raf = requestAnimationFrame(tick) })
+onMounted(() => { initHeading() })
 onBeforeUnmount(() => { if (raf) cancelAnimationFrame(raf) })
+
+/* 刻度盘：反向转 −航向，N 就贴在真北上 */
+const dialDeg = computed(() => (360 - shownH.value) % 360)
+const headingNote = computed(() => {
+  if (!headingOn.value) return '罗盘固定朝上'
+  if (headingState.value === 'ok') return '手机朝 ' + Math.round(headingDeg.value) + '°'
+  return headingLabel()
+})
+function toggleHeading() { setHeadingEnabled(!headingOn.value) }
 
 /* 罗盘中心的小字与右侧文案：中心只放数值（单位在下面一行写清），避免 SVG 里塞长句 */
 const speedText = computed(() => (speed.value == null ? '--' : (Math.round(speed.value * 10) / 10).toFixed(1)))
@@ -63,6 +87,8 @@ const dirText = computed(() => {
   const g = gust.value != null ? '（阵风 ' + Math.round(gust.value) + '）' : ''
   return (Math.round(speed.value * 10) / 10) + ' m/s' + g
 })
+/* 指针屏幕角度：世界方位 − 手机航向。色点（箭头）落在「吹向」，细针指向「来风」 */
+const needleDeg = computed(() => (((shownDeg.value - shownH.value) % 360) + 360) % 360)
 /* 风速越大，气流感跑得越快 */
 const flowDur = computed(() => {
   const s = speed.value == null ? 3 : speed.value
@@ -80,13 +106,16 @@ const stages = [
       <h2>风况与迎风岸</h2>
       <div class="head-right">
         <span class="card-note">{{ slot && slot.label ? slot.label : '--' }}</span>
+        <button class="act ghost" :class="{ on: headingOn && headingState === 'ok' }"
+                data-tip="罗盘指北|开：刻度盘跟着手机方向反向转，N 永远指向真北，指针也换算成真北方位；关：刻度盘固定朝上。"
+                @click="toggleHeading">{{ headingLabel() }}</button>
       </div>
     </div>
 
     <div class="compasswrap">
       <div class="compass">
         <svg viewBox="0 0 116 116" aria-hidden="true">
-          <g class="dial">
+          <g class="dial" :style="{ transform: `rotate(${dialDeg}deg)` }">
             <circle class="rim" cx="58" cy="58" r="52" fill="none" stroke="var(--hair)" stroke-width="1" />
             <circle class="ring" cx="58" cy="58" r="52" fill="none" stroke="var(--a1)" stroke-width="1" />
             <g class="ticks">
@@ -106,7 +135,7 @@ const stages = [
           </g>
           <circle cx="58" cy="58" r="38" fill="none" stroke="var(--hair)" stroke-width="1" stroke-dasharray="2 4" />
           <!-- 指针：rAF 缓动追目标角（见 tick()），转速跟风速走 -->
-          <g class="arrow" :style="{ transform: `rotate(${shownDeg}deg)` }">
+          <g class="arrow" :style="{ transform: `rotate(${needleDeg}deg)` }">
             <g class="streaks" :style="{ '--flowDur': flowDur }">
               <line class="s1" x1="50" y1="40" x2="50" y2="24" />
               <line class="s2" x1="58" y1="40" x2="58" y2="22" />
@@ -123,6 +152,7 @@ const stages = [
       <div class="windtxt">
         <b>{{ dirText }}</b>
         <span>{{ text }}</span>
+        <em v-if="headingOn && headingState === 'ok'" :data-tip="headingNote + '|真北相对屏幕的位置随手机转动'">{{ headingNote }}</em>
       </div>
     </div>
 
@@ -131,6 +161,10 @@ const stages = [
         {{ s.label }}
       </button>
     </div>
-    <div class="card-foot">罗盘实线箭头＝风吹向的方向。下面可以点未来 1/3/6 小时看风怎么转。</div>
+    <div class="card-foot">
+      实线箭头＝风吹向的方向，细尾在来风一侧。
+      开「指北」后刻度盘跟着手机反向转，N 永远贴着真北。
+      没开指北或设备没有磁力计时，N 只是朝屏幕上方。下面可以点未来 1/3/6 小时看风怎么转。
+    </div>
   </section>
 </template>

@@ -12,7 +12,7 @@ lurecast/
 │  │   engine.ts           评分引擎（纯函数，无 DOM）
 │  │   api.ts              6 个数据源 + 分级缓存 + 退避重试
 │  │   store.ts            IndexedDB 门面（同步接口 + 内存镜像 + 批量落盘）
-│  │   sat.ts / deeper.ts / aqua.ts / agent.ts / ai.ts / share.ts / i18n.ts …
+│  │   sat.ts / deeper.ts / aqua.ts / aqua3d.ts / heading.ts / preview.ts / agent.ts / ai.ts / i18n.ts …
 │  ├─ stores/               Pinia：env（环境数据）/ spots / my / sonar / ui
 │  └─ components/           cards/*.vue（14 张卡）+ modals/*.vue + MapView.vue
 ├─ index.html + assets/*.js 老壳（13 个 IIFE）：只作回滚，新开发不要往里加

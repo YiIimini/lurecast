@@ -9,7 +9,7 @@ import { Store } from './store'
 import { alertBox, confirmBox, toast } from './ui'
 
 const UPDATE_KEY = 'lc:update'
-const BUILD = '2026-10-19 · r35'
+const BUILD = '2026-10-19 · r36'
 
 export function currentBuild(): string { return BUILD }
 
